@@ -14,7 +14,7 @@ function MagicBox({ user }) {
   useEffect(() => {
     setMessages([{
       role: 'assistant',
-      content: `안녕하세요, ${user.displayName}님! 👋\n\n저는 ARK 지니입니다.\n증권 분석부터 제안서 작성까지 모든 업무를 도와드리겠습니다.\n\n무엇을 도와드릴까요?`,
+      content: '안녕하세요! 저는 ARK 지니입니다. 무엇을 도와드릴까요?',
       timestamp: new Date()
     }]);
   }, [user]);
@@ -54,7 +54,7 @@ function MagicBox({ user }) {
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.',
+        content: '죄송합니다. 오류가 발생했습니다.',
         timestamp: new Date()
       }]);
     } finally {
@@ -93,4 +93,94 @@ function MagicBox({ user }) {
         }]);
       } catch (error) {
         setMessages(prev => [...prev, {
-          role: '
+          role: 'assistant',
+          content: '이미지 분석 중 오류가 발생했습니다.',
+          timestamp: new Date()
+        }]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const togglePersona = () => {
+    setPersona(prev => prev === 'genie' ? 'professor' : 'genie');
+  };
+
+  return (
+    <div className="magic-box-container">
+      <div className="live-notification">
+        <div className="live-text">
+          ARK 지니 - AI 보험 비서
+        </div>
+      </div>
+
+      <div className="magic-box-header">
+        <div className="header-title">
+          <span>🧞</span>
+          <span>매직박스</span>
+          <span className="badge">PRO</span>
+        </div>
+        <button className="persona-toggle" onClick={togglePersona}>
+          {persona === 'genie' ? '🎓 교수님 모드' : '🧞 지니 모드'}
+        </button>
+      </div>
+
+      <div className="chat-area" ref={chatAreaRef}>
+        {messages.map((msg, index) => (
+          <div key={index} className={'message ' + msg.role}>
+            {msg.image && <img src={msg.image} alt="uploaded" className="message-image" />}
+            <div className="message-content">
+              <p>{msg.content}</p>
+            </div>
+            <div className="message-time">
+              {msg.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="message assistant">
+            <div className="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="input-area">
+        <div className="input-buttons">
+          <button className="input-btn" onClick={() => fileInputRef.current.click()} disabled={loading}>
+            <span>📷</span>
+          </button>
+          <button className="input-btn" onClick={() => fileInputRef.current.click()} disabled={loading}>
+            <span>📎</span>
+          </button>
+        </div>
+        <div className="text-input-wrapper">
+          <input
+            type="text"
+            className="text-input"
+            placeholder="무엇을 도와드릴까요?"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={loading}
+          />
+          <button className="send-btn" onClick={handleSendMessage} disabled={loading || !inputText.trim()}>
+            ➤
+          </button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default MagicBox;
