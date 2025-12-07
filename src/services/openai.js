@@ -1,5 +1,3 @@
-javascript
-
 // OpenAI API 서비스
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
