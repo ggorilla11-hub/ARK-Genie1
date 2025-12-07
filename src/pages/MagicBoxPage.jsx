@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getAIResponse, analyzeDocument, transcribeAudio, textToSpeech } from '../services/openai';
+import { getAIResponse, analyzeDocument, textToSpeech } from '../services/openai';
 import './MagicBoxPage.css';
 
 function MagicBoxPage({ user }) {
@@ -15,6 +15,7 @@ function MagicBoxPage({ user }) {
   const [isRecordingConsult, setIsRecordingConsult] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [interimText, setInterimText] = useState('');
   
   // 파일 관련 상태
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -23,14 +24,29 @@ function MagicBoxPage({ user }) {
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const chatAreaRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
+  const recognitionRef = useRef(null);
   const consultRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
   const consultChunksRef = useRef([]);
   const currentAudioRef = useRef(null);
-  const silenceTimerRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
+  const isProcessingRef = useRef(false);
+
+  // Web Speech API 초기화
+  const initSpeechRecognition = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('이 브라우저는 음성 인식을 지원하지 않습니다. Chrome을 사용해주세요.');
+      return null;
+    }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.lang = 'ko-KR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    
+    return recognition;
+  }, []);
 
   // 로컬 저장소에서 대화 불러오기
   useEffect(() => {
@@ -68,11 +84,23 @@ function MagicBoxPage({ user }) {
     if (chatAreaRef.current) {
       chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, interimText]);
+
+  // 컴포넌트 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+      }
+    };
+  }, []);
 
   const showGreeting = () => {
     const greeting = persona === 'genie' 
-      ? `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니입니다.\n\n📷 촬영 - 서류 촬영 분석\n📎 파일 - 문서 첨부\n🎤 마이크 - 음성으로 질문\n🔊 보이스 - 양방향 음성대화\n⏺️ 녹음 - 상담 녹음 요약\n\n무엇을 도와드릴까요?`
+      ? `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니입니다.\n\n📷 촬영 - 서류 촬영 분석\n📎 파일 - 문서 첨부\n🎤 마이크 - 음성 질문 (텍스트 답변)\n🔊 보이스 - 양방향 음성대화\n⏺️ 녹음 - 상담 녹음 요약\n\n무엇을 도와드릴까요?`
       : `${user?.displayName || '설계사'}님, 안녕하세요!\n\n오상열 교수입니다.\n오늘도 MDRT를 향한 여정을 함께 하겠습니다.\n\n무엇이든 물어보세요!`;
     
     setMessages([{ role: 'assistant', content: greeting, timestamp: new Date() }]);
@@ -105,6 +133,7 @@ function MagicBoxPage({ user }) {
     return hasPdfRequest && aiResponse.length > 200;
   };
 
+  // AI 음성 즉시 중단
   const stopAISpeaking = useCallback(() => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
@@ -114,74 +143,24 @@ function MagicBoxPage({ user }) {
     setIsSpeaking(false);
   }, []);
 
-  const startSilenceDetection = useCallback((stream, onSilence) => {
-    try {
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      analyserRef.current.fftSize = 512;
-      
-      const bufferLength = analyserRef.current.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      
-      let silenceStart = null;
-      const SILENCE_THRESHOLD = 10;
-      const SILENCE_DURATION = 1500;
-      
-      const checkSilence = () => {
-        if (!analyserRef.current) return;
-        
-        analyserRef.current.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-        
-        if (average < SILENCE_THRESHOLD) {
-          if (!silenceStart) {
-            silenceStart = Date.now();
-          } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            onSilence();
-            return;
-          }
-        } else {
-          silenceStart = null;
-        }
-        
-        silenceTimerRef.current = requestAnimationFrame(checkSilence);
-      };
-      
-      checkSilence();
-    } catch (e) {
-      console.error('Silence detection error:', e);
-    }
-  }, []);
-
-  const stopSilenceDetection = useCallback(() => {
-    if (silenceTimerRef.current) {
-      cancelAnimationFrame(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-  }, []);
-
-  const handleSendMessage = async (text = inputText, options = {}) => {
+  // 메시지 전송 처리
+  const handleSendMessage = async (text, options = {}) => {
     const { fromVoice = false, fromMic = false } = options;
     
-    if (!text.trim() && uploadedFiles.length === 0) return;
-    if (loading) return;
+    if (!text || !text.trim()) return;
+    if (isProcessingRef.current) return;
+    
+    isProcessingRef.current = true;
+    setInterimText('');
 
     const userMessage = {
       role: 'user',
-      content: text || '서류 분석을 요청합니다',
+      content: text,
       timestamp: new Date(),
       files: uploadedFiles.length > 0 ? [...uploadedFiles] : null
     };
 
     setMessages(prev => [...prev, userMessage]);
-    setInputText('');
     const filesToProcess = [...uploadedFiles];
     setUploadedFiles([]);
     setLoading(true);
@@ -201,6 +180,7 @@ function MagicBoxPage({ user }) {
       const showPdf = shouldShowPDF(text, response);
       addMessage('assistant', response, { canDownload: showPdf });
 
+      // 보이스 모드면 AI 음성 출력
       if (fromVoice && isVoiceMode) {
         await speakResponse(response);
       }
@@ -209,51 +189,34 @@ function MagicBoxPage({ user }) {
       addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setLoading(false);
-      
-      if (fromVoice && isVoiceMode && !isSpeaking) {
-        setTimeout(() => startVoiceListening(), 500);
-      }
+      isProcessingRef.current = false;
     }
   };
 
+  // AI 음성 출력
   const speakResponse = async (text) => {
-    if (!text || !isVoiceMode) return;
+    if (!text) return;
     
     setIsSpeaking(true);
     
     try {
-      const sentences = text.match(/[^.!?。]+[.!?。]?/g) || [text];
+      const maxLength = 200;
+      const textToSpeak = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
       
-      for (const sentence of sentences) {
-        if (!isVoiceMode || isListening) {
-          stopAISpeaking();
-          break;
-        }
+      const audioUrl = await textToSpeech(textToSpeak);
+      
+      await new Promise((resolve, reject) => {
+        const audio = new Audio(audioUrl);
+        currentAudioRef.current = audio;
         
-        const trimmed = sentence.trim();
-        if (trimmed.length < 2) continue;
+        audio.onended = () => {
+          currentAudioRef.current = null;
+          resolve();
+        };
+        audio.onerror = reject;
         
-        try {
-          const audioUrl = await textToSpeech(trimmed.substring(0, 500));
-          
-          if (!isVoiceMode || isListening) {
-            stopAISpeaking();
-            break;
-          }
-          
-          await new Promise((resolve, reject) => {
-            const audio = new Audio(audioUrl);
-            currentAudioRef.current = audio;
-            
-            audio.onended = resolve;
-            audio.onerror = reject;
-            
-            audio.play().catch(reject);
-          });
-        } catch (e) {
-          console.error('TTS sentence error:', e);
-        }
-      }
+        audio.play().catch(reject);
+      });
     } catch (error) {
       console.error('TTS Error:', error);
     } finally {
@@ -261,177 +224,188 @@ function MagicBoxPage({ user }) {
       currentAudioRef.current = null;
     }
   };
-  // ========== 마이크 모드 ==========
-  const handleMicMode = async () => {
+  // ========== 마이크 모드 (음성→텍스트, AI는 텍스트 답변) ==========
+  const handleMicMode = () => {
     if (isMicMode) {
-      stopMicRecording();
+      stopMicMode();
       return;
     }
 
     if (isVoiceMode) {
-      setIsVoiceMode(false);
-      stopAISpeaking();
+      stopVoiceMode();
     }
+
+    const recognition = initSpeechRecognition();
+    if (!recognition) return;
+
+    recognitionRef.current = recognition;
+    
+    recognition.onstart = () => {
+      setIsListening(true);
+      console.log('마이크 모드 시작');
+    };
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      let final = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      
+      setInterimText(interim);
+      
+      if (final) {
+        setInterimText('');
+        handleSendMessage(final, { fromMic: true });
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'no-speech') {
+        if (isMicMode && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }
+      }
+    };
+
+    recognition.onend = () => {
+      if (isMicMode && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          console.log('Recognition restart failed');
+        }
+      } else {
+        setIsListening(false);
+      }
+    };
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-        stopSilenceDetection();
-        
-        if (audioChunksRef.current.length === 0) {
-          setIsMicMode(false);
-          return;
-        }
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        if (audioBlob.size < 1000) {
-          setIsMicMode(false);
-          return;
-        }
-        
-        setLoading(true);
-        try {
-          const text = await transcribeAudio(audioBlob);
-          if (text && text.trim()) {
-            await handleSendMessage(text, { fromMic: true });
-          }
-        } catch (error) {
-          console.error('Transcription error:', error);
-          addMessage('assistant', '음성 인식에 실패했습니다. 다시 시도해주세요.');
-        }
-        setLoading(false);
-        setIsMicMode(false);
-      };
-
-      startSilenceDetection(stream, () => {
-        stopMicRecording();
-      });
-
-      mediaRecorder.start();
+      recognition.start();
       setIsMicMode(true);
-    } catch (error) {
-      console.error('Mic error:', error);
-      alert('마이크 접근 권한이 필요합니다.');
+      addMessage('assistant', '🎤 마이크 모드가 시작되었습니다.\n\n말씀하시면 텍스트로 답변드립니다.\n마이크 버튼을 다시 누르면 종료됩니다.');
+    } catch (e) {
+      console.error('Recognition start error:', e);
     }
   };
 
-  const stopMicRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const stopMicMode = () => {
+    setIsMicMode(false);
+    setIsListening(false);
+    setInterimText('');
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    stopSilenceDetection();
   };
 
-  // ========== 보이스 모드 ==========
+  // ========== 보이스 모드 (양방향 음성 대화) ==========
   const handleVoiceMode = () => {
     if (isVoiceMode) {
-      setIsVoiceMode(false);
-      setIsListening(false);
-      stopAISpeaking();
-      stopVoiceRecording();
+      stopVoiceMode();
       return;
     }
 
     if (isMicMode) {
-      setIsMicMode(false);
-      stopMicRecording();
+      stopMicMode();
     }
 
-    setIsVoiceMode(true);
-    addMessage('assistant', '🔊 보이스 모드가 시작되었습니다.\n\n말씀하시면 제가 음성으로 답변드립니다.\n대화 중 말씀하시면 제가 멈추고 들을게요.');
+    const recognition = initSpeechRecognition();
+    if (!recognition) return;
+
+    recognitionRef.current = recognition;
     
-    setTimeout(() => startVoiceListening(), 500);
-  };
-
-  const startVoiceListening = async () => {
-    if (!isVoiceMode || isListening || isSpeaking) return;
-    
-    stopAISpeaking();
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
-        stopSilenceDetection();
-        setIsListening(false);
-        
-        if (!isVoiceMode) return;
-        
-        if (audioChunksRef.current.length === 0) {
-          setTimeout(() => startVoiceListening(), 500);
-          return;
-        }
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        if (audioBlob.size < 1000) {
-          setTimeout(() => startVoiceListening(), 500);
-          return;
-        }
-        
-        setLoading(true);
-        try {
-          const text = await transcribeAudio(audioBlob);
-          if (text && text.trim()) {
-            await handleSendMessage(text, { fromVoice: true });
-          } else {
-            setTimeout(() => startVoiceListening(), 500);
-          }
-        } catch (error) {
-          console.error('Voice transcription error:', error);
-          setTimeout(() => startVoiceListening(), 500);
-        }
-        setLoading(false);
-      };
-
-      startSilenceDetection(stream, () => {
-        stopVoiceRecording();
-      });
-
-      mediaRecorder.start();
+    recognition.onstart = () => {
       setIsListening(true);
-    } catch (error) {
-      console.error('Voice listening error:', error);
-      setIsListening(false);
+      console.log('보이스 모드 시작');
+    };
+
+    recognition.onresult = (event) => {
+      if (isSpeaking) {
+        stopAISpeaking();
+      }
+      
+      let interim = '';
+      let final = '';
+      
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      
+      setInterimText(interim);
+      
+      if (final) {
+        setInterimText('');
+        handleSendMessage(final, { fromVoice: true });
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'no-speech') {
+        if (isVoiceMode && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }
+      }
+    };
+
+    recognition.onend = () => {
+      if (isVoiceMode && recognitionRef.current && !isSpeaking) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          console.log('Recognition restart failed');
+        }
+      } else if (!isVoiceMode) {
+        setIsListening(false);
+      }
+    };
+
+    try {
+      recognition.start();
+      setIsVoiceMode(true);
+      addMessage('assistant', '🔊 보이스 모드가 시작되었습니다.\n\n말씀하시면 음성으로 답변드립니다.\n제가 말하는 중에 말씀하시면 멈추고 들을게요.\n보이스 버튼을 다시 누르면 종료됩니다.');
+    } catch (e) {
+      console.error('Recognition start error:', e);
     }
   };
 
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const stopVoiceMode = () => {
+    setIsVoiceMode(false);
+    setIsListening(false);
+    setInterimText('');
+    stopAISpeaking();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    stopSilenceDetection();
   };
 
   useEffect(() => {
-    if (isListening && isSpeaking) {
-      stopAISpeaking();
+    if (isVoiceMode && !isSpeaking && !isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {}
     }
-  }, [isListening, isSpeaking, stopAISpeaking]);
+  }, [isSpeaking, isVoiceMode, isListening]);
 
-  // ========== 녹음 모드 ==========
+  // ========== 녹음 모드 (상담 녹음) ==========
   const handleRecordConsult = async () => {
     if (isRecordingConsult) {
       if (consultRecorderRef.current && consultRecorderRef.current.state === 'recording') {
@@ -440,15 +414,8 @@ function MagicBoxPage({ user }) {
       return;
     }
 
-    if (isVoiceMode) {
-      setIsVoiceMode(false);
-      stopAISpeaking();
-      stopVoiceRecording();
-    }
-    if (isMicMode) {
-      setIsMicMode(false);
-      stopMicRecording();
-    }
+    if (isVoiceMode) stopVoiceMode();
+    if (isMicMode) stopMicMode();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -470,14 +437,26 @@ function MagicBoxPage({ user }) {
         
         const audioBlob = new Blob(consultChunksRef.current, { type: 'audio/webm' });
         
+        saveRecordingToStorage(audioBlob);
+        
         addMessage('user', '📹 상담 녹음이 완료되었습니다. 요약을 요청합니다.');
         setLoading(true);
         
         try {
-          const text = await transcribeAudio(audioBlob);
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'recording.webm');
           
-          if (text && text.trim()) {
-            const summaryPrompt = `다음은 보험설계사와 고객의 상담 녹음 내용입니다. 분석해주세요:
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const text = data.text;
+            
+            if (text && text.trim()) {
+              const summaryPrompt = `다음은 보험설계사와 고객의 상담 녹음 내용입니다. 분석해주세요:
 
 1. **상담 요약** (3~5줄)
 2. **파악된 고객 니즈**
@@ -487,15 +466,18 @@ function MagicBoxPage({ user }) {
 
 상담 내용:
 ${text}`;
-            
-            const response = await getAIResponse(summaryPrompt, [], persona);
-            addMessage('assistant', response, { canDownload: true });
+              
+              const aiResponse = await getAIResponse(summaryPrompt, [], persona);
+              addMessage('assistant', aiResponse, { canDownload: true });
+            } else {
+              addMessage('assistant', '녹음 내용을 인식하지 못했습니다. 다시 시도해주세요.');
+            }
           } else {
-            addMessage('assistant', '녹음 내용을 인식하지 못했습니다. 다시 시도해주세요.');
+            throw new Error('Transcription failed');
           }
         } catch (error) {
           console.error('Consult recording error:', error);
-          addMessage('assistant', '녹음 분석 중 오류가 발생했습니다.');
+          addMessage('assistant', '녹음 분석 중 오류가 발생했습니다. 녹음 파일은 저장되었습니다.');
         }
         setLoading(false);
       };
@@ -507,6 +489,25 @@ ${text}`;
       console.error('Consult record error:', error);
       alert('마이크 접근 권한이 필요합니다.');
     }
+  };
+
+  const saveRecordingToStorage = (blob) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const recordings = JSON.parse(localStorage.getItem('arkgenie_recordings') || '[]');
+      const now = Date.now();
+      
+      const validRecordings = recordings.filter(r => now - r.timestamp < 24 * 60 * 60 * 1000);
+      
+      validRecordings.push({
+        id: now,
+        timestamp: now,
+        data: reader.result
+      });
+      
+      localStorage.setItem('arkgenie_recordings', JSON.stringify(validRecordings));
+    };
+    reader.readAsDataURL(blob);
   };
 
   // ========== 파일/카메라 ==========
@@ -535,7 +536,7 @@ ${text}`;
 
     if (isCamera && newFiles.length > 0) {
       setTimeout(() => {
-        handleSendMessage('이 서류를 분석해주세요.');
+        handleSendMessage('이 서류를 분석해주세요.', {});
       }, 500);
     }
   };
@@ -544,9 +545,10 @@ ${text}`;
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleDownloadPDF = async (content) => {
+  const handleDownloadFile = async (content) => {
     try {
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + content], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -561,6 +563,12 @@ ${text}`;
     }
   };
 
+  const handleTextSubmit = () => {
+    if (!inputText.trim()) return;
+    handleSendMessage(inputText, {});
+    setInputText('');
+  };
+
   const togglePersona = () => {
     setPersona(prev => prev === 'genie' ? 'professor' : 'genie');
   };
@@ -568,7 +576,7 @@ ${text}`;
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      handleTextSubmit();
     }
   };
 
@@ -598,31 +606,57 @@ ${text}`;
       {isVoiceMode && (
         <div className="voice-mode-banner">
           <div className="voice-indicator">
-            {isListening ? (
-              <>
-                <div className="listening-waves">
-                  <span></span><span></span><span></span><span></span><span></span>
-                </div>
-                <span>듣고 있습니다...</span>
-              </>
-            ) : isSpeaking ? (
+            {isSpeaking ? (
               <>
                 <div className="speaking-icon">🔊</div>
-                <span>말하는 중...</span>
+                <span>말하는 중... (말씀하시면 멈춥니다)</span>
               </>
             ) : loading ? (
               <>
                 <div className="thinking-icon">💭</div>
                 <span>생각 중...</span>
               </>
+            ) : isListening ? (
+              <>
+                <div className="listening-waves">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span>듣고 있습니다...</span>
+              </>
             ) : (
               <>
                 <div className="ready-icon">🎤</div>
-                <span>말씀해주세요</span>
+                <span>준비 중...</span>
               </>
             )}
           </div>
           <button className="voice-stop-btn" onClick={handleVoiceMode}>종료</button>
+        </div>
+      )}
+
+      {isMicMode && (
+        <div className="mic-mode-banner">
+          <div className="mic-indicator">
+            {loading ? (
+              <>
+                <div className="thinking-icon">💭</div>
+                <span>생각 중...</span>
+              </>
+            ) : isListening ? (
+              <>
+                <div className="listening-waves">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span>듣고 있습니다...</span>
+              </>
+            ) : (
+              <>
+                <div className="ready-icon">🎤</div>
+                <span>준비 중...</span>
+              </>
+            )}
+          </div>
+          <button className="mic-stop-btn" onClick={handleMicMode}>종료</button>
         </div>
       )}
 
@@ -659,7 +693,7 @@ ${text}`;
             </div>
             {msg.role === 'assistant' && msg.canDownload && (
               <div className="message-actions">
-                <button className="action-btn" onClick={() => handleDownloadPDF(msg.content)}>
+                <button className="action-btn" onClick={() => handleDownloadFile(msg.content)}>
                   📄 저장
                 </button>
               </div>
@@ -669,6 +703,14 @@ ${text}`;
             </div>
           </div>
         ))}
+        
+        {interimText && (
+          <div className="message user interim">
+            <div className="message-bubble">
+              <p>{interimText}</p>
+            </div>
+          </div>
+        )}
         
         {loading && (
           <div className="message assistant">
@@ -734,16 +776,16 @@ ${text}`;
           <input
             type="text"
             className="text-input"
-            placeholder={isVoiceMode ? "보이스 모드 중..." : "무엇을 도와드릴까요?"}
+            placeholder={isVoiceMode ? "보이스 모드 중..." : isMicMode ? "마이크 모드 중..." : "무엇을 도와드릴까요?"}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyPress={handleKeyPress}
-            disabled={loading || isVoiceMode || isMicMode}
+            disabled={loading}
           />
           <button
             className="send-btn"
-            onClick={() => handleSendMessage()}
-            disabled={loading || isVoiceMode || isMicMode || (!inputText.trim() && uploadedFiles.length === 0)}
+            onClick={handleTextSubmit}
+            disabled={loading || (!inputText.trim() && uploadedFiles.length === 0)}
           >
             ➤
           </button>
