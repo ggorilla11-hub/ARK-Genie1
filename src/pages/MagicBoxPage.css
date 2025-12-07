@@ -586,3 +586,8 @@
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 }
+/* 삼성폰 하단 네비게이션 겹침 해결 */
+.input-area {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px)) !important;
+  margin-bottom: 60px;
+}
