@@ -1220,3 +1220,60 @@ ${text}`;
 
 export default MagicBoxPage;
 export default MagicBoxPage;
+// ========== 마이크 모드 ==========
+  const handleMicMode = () => {
+    if (isMicMode) {
+      // 끄기
+      micModeRef.current = false;
+      setIsMicMode(false);
+      setIsListening(false);
+      setCurrentTranscript('');
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e) {}
+        recognitionRef.current = null;
+      }
+      return;
+    }
+
+    // 다른 모드 끄기
+    if (isVoiceMode) {
+      voiceModeRef.current = false;
+      setIsVoiceMode(false);
+      stopAISpeaking();
+    }
+
+    // 마이크 모드 시작
+    micModeRef.current = true;
+    setIsMicMode(true);
+    addMessage('assistant', '🎤 마이크 모드가 시작되었습니다.\n\n말씀하시면 텍스트로 답변드립니다.\n마이크 버튼을 다시 누르면 종료됩니다.');
+    
+    setTimeout(() => {
+      startListening('mic');
+    }, 500);
+  };
+
+  // ========== 보이스 모드 ==========
+  const handleVoiceMode = () => {
+    if (isVoiceMode) {
+      // 끄기
+      console.log('보이스 모드 종료');
+      voiceModeRef.current = false;
+      setIsVoiceMode(false);
+      setIsListening(false);
+      setCurrentTranscript('');
+      stopAISpeaking();
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e) {}
+        recognitionRef.current = null;
+      }
+      return;
+    }
+
+    // 다른 모드 끄기
+    if (isMicMode) {
+      micModeRef.current = false;
+      setIsMicMode(false);
+    }
+
+    // 보이스 모드 시작
+    console
