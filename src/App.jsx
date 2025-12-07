@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from './firebase';
-import LoginScreen from './components/LoginScreen';
-import MagicBox from './components/MagicBox';
+import LoginScreen from './pages/LoginScreen';
+import HomePage from './pages/HomePage';
+import CustomerPage from './pages/CustomerPage';
+import MagicBoxPage from './pages/MagicBoxPage';
+import AIGeniePage from './pages/AIGeniePage';
+import MyPage from './pages/MyPage';
+import BottomNav from './components/BottomNav';
+import TopInfoBar from './components/TopInfoBar';
+import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
+      if (user && location.pathname === '/') {
+        navigate('/magicbox');
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -19,6 +32,7 @@ function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      navigate('/');
     } catch (error) {
       console.error('로그아웃 오류:', error);
     }
@@ -26,14 +40,9 @@ function App() {
 
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        background: '#f5f7fa'
-      }}>
-        <div>로딩중...</div>
+      <div className="loading-screen">
+        <div className="loading-spinner"></div>
+        <p>로딩중...</p>
       </div>
     );
   }
@@ -42,28 +51,22 @@ function App() {
     return <LoginScreen onLoginSuccess={setUser} />;
   }
 
+  const showNav = location.pathname !== '/';
+
   return (
-    <div>
-      <MagicBox user={user} />
-      <button
-        onClick={handleLogout}
-        style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          background: 'rgba(255, 255, 255, 0.9)',
-          border: '2px solid #1a3a5c',
-          borderRadius: '50%',
-          width: '40px',
-          height: '40px',
-          fontSize: '20px',
-          cursor: 'pointer',
-          zIndex: 1000
-        }}
-        title="로그아웃"
-      >
-        🚪
-      </button>
+    <div className="app-container">
+      {showNav && <TopInfoBar />}
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<LoginScreen onLoginSuccess={setUser} />} />
+          <Route path="/home" element={<HomePage user={user} />} />
+          <Route path="/customer" element={<CustomerPage user={user} />} />
+          <Route path="/magicbox" element={<MagicBoxPage user={user} />} />
+          <Route path="/aigenie" element={<AIGeniePage user={user} />} />
+          <Route path="/mypage" element={<MyPage user={user} onLogout={handleLogout} />} />
+        </Routes>
+      </main>
+      {showNav && <BottomNav />}
     </div>
   );
 }
