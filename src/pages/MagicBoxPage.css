@@ -96,6 +96,40 @@
   font-size: 14px;
 }
 
+/* ========== 마이크 모드 배너 ========== */
+.mic-mode-banner {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: white;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.mic-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.mic-stop-btn {
+  background: rgba(255, 255, 255, 0.25);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mic-stop-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 .listening-waves {
   display: flex;
   align-items: center;
@@ -218,6 +252,15 @@
 
 .message.user {
   align-self: flex-end;
+}
+
+/* 실시간 음성 인식 텍스트 */
+.message.interim .message-bubble {
+  background: linear-gradient(135deg, #1a3a5c, #2d5a8c);
+  color: white;
+  border-bottom-right-radius: 4px;
+  opacity: 0.7;
+  font-style: italic;
 }
 
 .message-files {
