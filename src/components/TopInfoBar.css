@@ -1,0 +1,44 @@
+.top-info-bar {
+  background: linear-gradient(135deg, #1a3a5c 0%, #2d5a8c 100%);
+  padding: 10px 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.scrolling-container {
+  overflow: hidden;
+  width: 100%;
+}
+
+.scrolling-content {
+  display: flex;
+  gap: 32px;
+  white-space: nowrap;
+  animation: scrollText 25s linear infinite;
+}
+
+@keyframes scrollText {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.info-item.highlight {
+  color: #00ff88;
+}
+
+.info-item.gold {
+  color: #d4af37;
+}
