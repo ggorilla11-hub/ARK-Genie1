@@ -1,0 +1,255 @@
+.aigenie-page {
+  padding: 20px;
+  padding-bottom: 100px;
+}
+
+.aigenie-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.genie-avatar {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 16px;
+}
+
+.avatar-glow {
+  position: absolute;
+  inset: -10px;
+  background: radial-gradient(circle, rgba(91, 163, 224, 0.3) 0%, transparent 70%);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+.avatar-emoji {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+}
+
+.aigenie-header h1 {
+  font-size: 28px;
+  font-weight: 800;
+  color: #1a3a5c;
+  margin-bottom: 4px;
+}
+
+.aigenie-header p {
+  font-size: 14px;
+  color: #666;
+}
+
+.status-card {
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #27ae60;
+  animation: blink 2s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-header span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #27ae60;
+}
+
+.status-desc {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.voice-activate-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #1a3a5c, #2d5a8c);
+  color: white;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.mic-icon {
+  font-size: 20px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a3a5c;
+  margin-bottom: 4px;
+}
+
+.section-subtitle {
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  position: relative;
+}
+
+.feature-card.coming-soon {
+  opacity: 0.7;
+}
+
+.feature-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.feature-card h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a3a5c;
+  margin-bottom: 4px;
+}
+
+.feature-card p {
+  font-size: 11px;
+  color: #666;
+}
+
+.coming-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #e74c3c;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.preview-section {
+  margin-bottom: 24px;
+}
+
+.preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-item {
+  background: white;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.preview-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4af37, #f4d03f);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.preview-item p {
+  font-size: 13px;
+  color: #2d3436;
+  line-height: 1.4;
+}
+
+.notify-card {
+  background: linear-gradient(135deg, #1a3a5c, #2d5a8c);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: white;
+}
+
+.notify-icon {
+  font-size: 32px;
+}
+
+.notify-content {
+  flex: 1;
+}
+
+.notify-content h4 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.notify-content p {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.notify-btn {
+  background: #d4af37;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
