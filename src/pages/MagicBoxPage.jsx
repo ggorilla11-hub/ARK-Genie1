@@ -811,5 +811,412 @@ ${text}`;
     </div>
   );
 }
+// ========== 녹음 모드 (상담 녹음) ==========
+  const handleRecordConsult = async () => {
+    if (isRecordingConsult) {
+      if (consultRecorderRef.current && consultRecorderRef.current.state === 'recording') {
+        consultRecorderRef.current.stop();
+      }
+      return;
+    }
 
+    if (isVoiceMode) stopVoiceMode();
+    if (isMicMode) stopMicMode();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      consultRecorderRef.current = mediaRecorder;
+      consultChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          consultChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecordingConsult(false);
+        
+        if (consultChunksRef.current.length === 0) return;
+        
+        const audioBlob = new Blob(consultChunksRef.current, { type: 'audio/webm' });
+        
+        saveRecordingToStorage(audioBlob);
+        
+        addMessage('user', '📹 상담 녹음이 완료되었습니다. 요약을 요청합니다.');
+        setLoading(true);
+        
+        try {
+          const formData = new FormData();
+          formData.append('file', audioBlob, 'recording.webm');
+          
+          const response = await fetch('/api/transcribe', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const text = data.text;
+            
+            if (text && text.trim()) {
+              const summaryPrompt = `다음은 보험설계사와 고객의 상담 녹음 내용입니다. 분석해주세요:
+
+1. **상담 요약** (3~5줄)
+2. **파악된 고객 니즈**
+3. **추천 상품/서비스**
+4. **다음 상담 시 할 일**
+5. **특이사항**
+
+상담 내용:
+${text}`;
+              
+              const aiResponse = await getAIResponse(summaryPrompt, [], persona);
+              addMessage('assistant', aiResponse, { canDownload: true });
+            } else {
+              addMessage('assistant', '녹음 내용을 인식하지 못했습니다. 다시 시도해주세요.');
+            }
+          } else {
+            throw new Error('Transcription failed');
+          }
+        } catch (error) {
+          console.error('Consult recording error:', error);
+          addMessage('assistant', '녹음 분석 중 오류가 발생했습니다. 녹음 파일은 저장되었습니다.');
+        }
+        setLoading(false);
+      };
+
+      mediaRecorder.start();
+      setIsRecordingConsult(true);
+      addMessage('assistant', '🔴 상담 녹음을 시작합니다.\n\n녹음을 마치시려면 녹음 버튼을 다시 눌러주세요.');
+    } catch (error) {
+      console.error('Consult record error:', error);
+      alert('마이크 접근 권한이 필요합니다.');
+    }
+  };
+
+  const saveRecordingToStorage = (blob) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const recordings = JSON.parse(localStorage.getItem('arkgenie_recordings') || '[]');
+      const now = Date.now();
+      
+      const validRecordings = recordings.filter(r => now - r.timestamp < 24 * 60 * 60 * 1000);
+      
+      validRecordings.push({
+        id: now,
+        timestamp: now,
+        data: reader.result
+      });
+      
+      localStorage.setItem('arkgenie_recordings', JSON.stringify(validRecordings));
+    };
+    reader.readAsDataURL(blob);
+  };
+
+  // ========== 파일/카메라 ==========
+  const handleCamera = () => {
+    cameraInputRef.current?.click();
+  };
+
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e, isCamera = false) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const newFiles = files.map(file => ({
+      file,
+      name: file.name,
+      type: file.type,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+      isCamera
+    }));
+
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+    e.target.value = '';
+
+    if (isCamera && newFiles.length > 0) {
+      setTimeout(() => {
+        handleSendMessage('이 서류를 분석해주세요.');
+      }, 500);
+    }
+  };
+
+  const removeFile = (index) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDownloadFile = async (content) => {
+    try {
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ARK지니_분석결과_${new Date().toLocaleDateString('ko-KR').replace(/\./g, '')}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('다운로드에 실패했습니다.');
+    }
+  };
+
+  const handleTextSubmit = () => {
+    if (!inputText.trim()) return;
+    handleSendMessage(inputText);
+    setInputText('');
+  };
+
+  const togglePersona = () => {
+    setPersona(prev => prev === 'genie' ? 'professor' : 'genie');
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleTextSubmit();
+    }
+  };
+
+  const clearChat = () => {
+    localStorage.removeItem('arkgenie_messages');
+    localStorage.removeItem('arkgenie_messages_time');
+    showGreeting();
+  };
+
+  // ========== 렌더링 ==========
+  return (
+    <div className="magicbox-page">
+      <div className="magicbox-header">
+        <div className="header-left">
+          <span className="header-icon">🧞</span>
+          <span className="header-title">매직박스</span>
+          <span className="pro-badge">PRO</span>
+        </div>
+        <div className="header-right">
+          <button className="clear-btn" onClick={clearChat} title="대화 초기화">🗑️</button>
+          <button className="mode-toggle" onClick={togglePersona}>
+            {persona === 'genie' ? '🎓 교수님' : '🧞 지니'}
+          </button>
+        </div>
+      </div>
+
+      {isVoiceMode && (
+        <div className="voice-mode-banner">
+          <div className="voice-indicator">
+            {isSpeaking ? (
+              <>
+                <div className="speaking-icon">🔊</div>
+                <span>말하는 중... (말씀하시면 멈춥니다)</span>
+              </>
+            ) : loading ? (
+              <>
+                <div className="thinking-icon">💭</div>
+                <span>생각 중...</span>
+              </>
+            ) : isListening ? (
+              <>
+                <div className="listening-waves">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span>듣고 있습니다...</span>
+              </>
+            ) : (
+              <>
+                <div className="ready-icon">🎤</div>
+                <span>준비 중...</span>
+              </>
+            )}
+          </div>
+          <button className="voice-stop-btn" onClick={handleVoiceMode}>종료</button>
+        </div>
+      )}
+
+      {isMicMode && (
+        <div className="mic-mode-banner">
+          <div className="mic-indicator">
+            {loading ? (
+              <>
+                <div className="thinking-icon">💭</div>
+                <span>생각 중...</span>
+              </>
+            ) : isListening ? (
+              <>
+                <div className="listening-waves">
+                  <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span>듣고 있습니다...</span>
+              </>
+            ) : (
+              <>
+                <div className="ready-icon">🎤</div>
+                <span>준비 중...</span>
+              </>
+            )}
+          </div>
+          <button className="mic-stop-btn" onClick={handleMicMode}>종료</button>
+        </div>
+      )}
+
+      {isRecordingConsult && (
+        <div className="recording-banner">
+          <div className="rec-indicator">
+            <div className="rec-dot"></div>
+            <span>상담 녹음 중...</span>
+          </div>
+          <button className="rec-stop-btn" onClick={handleRecordConsult}>녹음 종료</button>
+        </div>
+      )}
+
+      <div className="chat-area" ref={chatAreaRef}>
+        {messages.map((msg, index) => (
+          <div key={index} className={`message ${msg.role}`}>
+            {msg.files && (
+              <div className="message-files">
+                {msg.files.map((file, i) => (
+                  <div key={i} className="file-preview-msg">
+                    {file.preview ? (
+                      <img src={file.preview} alt={file.name} />
+                    ) : (
+                      <span className="file-icon">📄</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="message-bubble">
+              {msg.content.split('\n').map((line, i) => (
+                <p key={i}>{line}</p>
+              ))}
+            </div>
+            {msg.role === 'assistant' && msg.canDownload && (
+              <div className="message-actions">
+                <button className="action-btn" onClick={() => handleDownloadFile(msg.content)}>
+                  📄 저장
+                </button>
+              </div>
+            )}
+            <div className="message-time">
+              {msg.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
+        ))}
+        
+        {interimText && (
+          <div className="message user interim">
+            <div className="message-bubble">
+              <p>{interimText}</p>
+            </div>
+          </div>
+        )}
+        
+        {loading && (
+          <div className="message assistant">
+            <div className="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="input-area">
+        {uploadedFiles.length > 0 && (
+          <div className="uploaded-files">
+            {uploadedFiles.map((file, index) => (
+              <div key={index} className="uploaded-file">
+                {file.preview ? (
+                  <img src={file.preview} alt={file.name} />
+                ) : (
+                  <span className="file-icon">📄</span>
+                )}
+                <button className="remove-file" onClick={() => removeFile(index)}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="input-tools">
+          <button className="tool-btn" onClick={handleCamera} title="카메라">
+            <span className="tool-icon">📷</span>
+            <span className="tool-label">촬영</span>
+          </button>
+          <button className="tool-btn" onClick={handleFileSelect} title="파일 첨부">
+            <span className="tool-icon">📎</span>
+            <span className="tool-label">파일</span>
+          </button>
+          <button 
+            className={`tool-btn ${isMicMode ? 'active recording' : ''}`} 
+            onClick={handleMicMode}
+            title="마이크 (텍스트 답변)"
+          >
+            <span className="tool-icon">🎤</span>
+            <span className="tool-label">마이크</span>
+          </button>
+          <button 
+            className={`tool-btn ${isVoiceMode ? 'active' : ''}`} 
+            onClick={handleVoiceMode}
+            title="보이스 (음성 대화)"
+          >
+            <span className="tool-icon">🔊</span>
+            <span className="tool-label">보이스</span>
+          </button>
+          <button 
+            className={`tool-btn ${isRecordingConsult ? 'active recording' : ''}`} 
+            onClick={handleRecordConsult}
+            title="상담 녹음"
+          >
+            <span className="tool-icon">⏺️</span>
+            <span className="tool-label">녹음</span>
+          </button>
+        </div>
+
+        <div className="text-input-row">
+          <input
+            type="text"
+            className="text-input"
+            placeholder={isVoiceMode ? "보이스 모드 중..." : isMicMode ? "마이크 모드 중..." : "무엇을 도와드릴까요?"}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={loading}
+          />
+          <button
+            className="send-btn"
+            onClick={handleTextSubmit}
+            disabled={loading || (!inputText.trim() && uploadedFiles.length === 0)}
+          >
+            ➤
+          </button>
+        </div>
+
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFileChange(e, true)}
+        />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.pdf,.doc,.docx"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => handleFileChange(e, false)}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default MagicBoxPage;
 export default MagicBoxPage;
