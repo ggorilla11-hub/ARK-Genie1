@@ -591,3 +591,23 @@
   padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px)) !important;
   margin-bottom: 60px;
 }
+/* 삼성폰 하단 네비게이션 겹침 해결 */
+@media screen and (max-width: 768px) {
+  .magicbox-page {
+    padding-bottom: 140px !important;
+  }
+  
+  .input-area {
+    position: fixed;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    background: white;
+    z-index: 100;
+    padding-bottom: 20px !important;
+  }
+  
+  .chat-area {
+    padding-bottom: 200px !important;
+  }
+}
