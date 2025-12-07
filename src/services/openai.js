@@ -1,4 +1,4 @@
-// OpenAI API 서비스
+javascript// OpenAI API 서비스
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 // AI 응답 받기
@@ -80,60 +80,68 @@ export const analyzeDocument = async (base64Image) => {
   }
 };
 
-// 브라우저 TTS - 가장 단순한 버전
-export const speakText = (text) => {
-  return new Promise((resolve) => {
-    // TTS 지원 안 하면 바로 종료
-    if (!window.speechSynthesis) {
-      resolve();
-      return;
+// OpenAI TTS - URL 반환
+export const textToSpeech = async (text) => {
+  try {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text,
+        voice: 'nova',
+        speed: 1.0
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('TTS 오류: ' + response.status);
     }
 
-    // 기존 음성 모두 취소
-    window.speechSynthesis.cancel();
-
-    // 잠시 대기 후 실행 (모바일 버그 방지)
-    setTimeout(() => {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ko-KR';
-      utter.rate = 1;
-      utter.pitch = 1;
-      utter.volume = 1;
-      
-      utter.onend = () => {
-        resolve();
-      };
-      
-      utter.onerror = (e) => {
-        console.log('TTS 오류:', e);
-        resolve();
-      };
-
-      window.speechSynthesis.speak(utter);
-      
-      // 모바일 Chrome 버그 해결: 15초마다 resume 호출
-      const keepAlive = setInterval(() => {
-        if (window.speechSynthesis.speaking) {
-          window.speechSynthesis.pause();
-          window.speechSynthesis.resume();
-        } else {
-          clearInterval(keepAlive);
-        }
-      }, 10000);
-      
-      // 최대 60초 후 자동 종료
-      setTimeout(() => {
-        clearInterval(keepAlive);
-        resolve();
-      }, 60000);
-      
-    }, 100);
-  });
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    return audioUrl;
+    
+  } catch (error) {
+    console.error('textToSpeech Error:', error);
+    throw error;
+  }
 };
 
-// 음성 중지
+// 음성 재생
+let currentAudio = null;
+
+export const speakText = async (text) => {
+  try {
+    const audioUrl = await textToSpeech(text);
+    currentAudio = new Audio(audioUrl);
+    
+    return new Promise((resolve) => {
+      currentAudio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        currentAudio = null;
+        resolve();
+      };
+      
+      currentAudio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        currentAudio = null;
+        resolve();
+      };
+      
+      currentAudio.play().catch(() => resolve());
+    });
+  } catch (error) {
+    console.error('speakText Error:', error);
+  }
+};
+
 export const stopSpeaking = () => {
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
   }
 };
