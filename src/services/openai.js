@@ -1,4 +1,3 @@
-
 javascript
 
 // OpenAI API 서비스
