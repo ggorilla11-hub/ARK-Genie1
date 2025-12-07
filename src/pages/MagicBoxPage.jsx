@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { getAIResponse, analyzeImage, transcribeAudio, textToSpeech } from '../services/openai';
+import { getAIResponse, analyzeDocument, transcribeAudio, textToSpeech } from '../services/openai';
 import { generateAnalysisReport } from '../services/pdfService';
 import './MagicBoxPage.css';
 
@@ -8,26 +8,25 @@ function MagicBoxPage({ user }) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [persona, setPersona] = useState('genie');
-  const [isRecording, setIsRecording] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isConsultRecording, setIsConsultRecording] = useState(false);
+  const [consultChunks, setConsultChunks] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const chatAreaRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const consultRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
   useEffect(() => {
     const greeting = persona === 'genie' 
-      ? `안녕하세요, ${user?.displayName || '고객'}님! 👋\n\n저는 ARK 지니입니다.\n증권 분석, 제안서 작성, 보상 청구까지\n모든 보험 업무를 도와드려요!\n\n📷 사진, 🎤 음성, 📎 파일로 질문해보세요!`
-      : `안녕하세요, ${user?.displayName || '설계사'}님!\n\n오상열 교수입니다.\n오늘도 훌륭한 설계사가 되기 위한 여정을 함께 하겠습니다.\n\n무엇이든 물어보세요!`;
+      ? `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니, 대한민국 최고의 AI 보험 전문가입니다.\n\n📷 **카메라**: 증권/서류 촬영하여 즉시 분석\n📎 **파일**: 문서 첨부하여 분석\n🎤 **마이크**: 음성으로 질문 (텍스트 답변)\n🔊 **보이스**: 양방향 음성 대화\n⏺️ **녹음**: 상담 녹음 후 요약\n\n무엇을 도와드릴까요?`
+      : `안녕하세요, ${user?.displayName || '설계사'}님!\n\n오상열 교수입니다.\n오늘도 훌륭한 MDRT가 되기 위한 여정을 함께 하겠습니다.\n\n무엇이든 물어보세요!`;
     
-    setMessages([{
-      role: 'assistant',
-      content: greeting,
-      timestamp: new Date()
-    }]);
+    setMessages([{ role: 'assistant', content: greeting, timestamp: new Date() }]);
   }, [user, persona]);
 
   useEffect(() => {
@@ -45,13 +44,17 @@ function MagicBoxPage({ user }) {
     });
   };
 
-  const handleSendMessage = async (text = inputText) => {
+  const addMessage = (role, content, extras = {}) => {
+    setMessages(prev => [...prev, { role, content, timestamp: new Date(), ...extras }]);
+  };
+
+  const handleSendMessage = async (text = inputText, fromVoice = false) => {
     if (!text.trim() && uploadedFiles.length === 0) return;
     if (loading) return;
 
     const userMessage = {
       role: 'user',
-      content: text || '이미지 분석 요청',
+      content: text || '서류 분석 요청',
       timestamp: new Date(),
       files: uploadedFiles.length > 0 ? [...uploadedFiles] : null
     };
@@ -68,49 +71,46 @@ function MagicBoxPage({ user }) {
       if (filesToProcess.length > 0 && filesToProcess.some(f => f.type.startsWith('image/'))) {
         const imageFile = filesToProcess.find(f => f.type.startsWith('image/'));
         const base64 = await fileToBase64(imageFile.file);
-        response = await analyzeImage(base64);
+        response = await analyzeDocument(base64);
       } else {
-        const history = messages.slice(-10).map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
+        const history = messages.slice(-10).map(msg => ({ role: msg.role, content: msg.content }));
         response = await getAIResponse(text, history, persona);
       }
 
-      const assistantMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-        canDownload: response.length > 200
-      };
+      addMessage('assistant', response, { canDownload: response.length > 200 });
 
-      setMessages(prev => [...prev, assistantMessage]);
-
-      if (isVoiceMode) {
+      // 보이스 모드면 AI 답변을 음성으로 출력 후 다시 듣기 시작
+      if (isVoiceMode || fromVoice) {
         try {
-          const audioUrl = await textToSpeech(response.substring(0, 500));
+          const audioUrl = await textToSpeech(response.substring(0, 1000));
           const audio = new Audio(audioUrl);
+          audio.onended = () => {
+            if (isVoiceMode) startVoiceListening();
+          };
           audio.play();
         } catch (e) {
           console.error('TTS Error:', e);
+          if (isVoiceMode) startVoiceListening();
         }
       }
-
     } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.',
-        timestamp: new Date()
-      }]);
+      addMessage('assistant', '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCamera = () => cameraInputRef.current?.click();
-  const handleFileSelect = () => fileInputRef.current?.click();
+  // 카메라 촬영 (실제 카메라)
+  const handleCamera = () => {
+    cameraInputRef.current?.click();
+  };
 
-  const handleFileChange = async (e) => {
+  // 파일 선택
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e, isCamera = false) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
@@ -118,18 +118,27 @@ function MagicBoxPage({ user }) {
       file,
       name: file.name,
       type: file.type,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+      isCamera
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
+
+    // 카메라 촬영이면 자동으로 분석 시작
+    if (isCamera && newFiles.length > 0) {
+      setTimeout(() => {
+        handleSendMessage('이 서류를 분석해주세요.');
+      }, 500);
+    }
   };
 
   const removeFile = (index) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const toggleRecording = async () => {
+  // 마이크 (음성 → 텍스트, AI는 텍스트로 답변)
+  const handleMicPress = async () => {
     if (isRecording) {
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
@@ -141,7 +150,7 @@ function MagicBoxPage({ user }) {
         audioChunksRef.current = [];
 
         mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-
+        
         mediaRecorder.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           stream.getTracks().forEach(track => track.stop());
@@ -149,9 +158,14 @@ function MagicBoxPage({ user }) {
           setLoading(true);
           try {
             const text = await transcribeAudio(audioBlob);
-            if (text) handleSendMessage(text);
+            if (text) {
+              addMessage('user', text);
+              const history = messages.slice(-10).map(msg => ({ role: msg.role, content: msg.content }));
+              const response = await getAIResponse(text, history, persona);
+              addMessage('assistant', response, { canDownload: response.length > 200 });
+            }
           } catch (error) {
-            console.error('Transcription error:', error);
+            addMessage('assistant', '음성 인식에 실패했습니다. 다시 시도해주세요.');
           }
           setLoading(false);
         };
@@ -164,105 +178,11 @@ function MagicBoxPage({ user }) {
     }
   };
 
-  const handleDownloadPDF = async (content) => {
+  // 보이스 모드 (양방향 음성 대화)
+  const startVoiceListening = async () => {
+    if (!isVoiceMode) return;
+    
     try {
-      await generateAnalysisReport(content, user?.displayName || 'Customer');
-    } catch (error) {
-      alert('PDF 생성에 실패했습니다.');
-    }
-  };
-
-  const togglePersona = () => setPersona(prev => prev === 'genie' ? 'professor' : 'genie');
-  const toggleVoiceMode = () => setIsVoiceMode(prev => !prev);
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  return (
-    <div className="magicbox-page">
-      <div className="magicbox-header">
-        <div className="header-left">
-          <span className="header-icon">🧞</span>
-          <span className="header-title">매직박스</span>
-          <span className="pro-badge">PRO</span>
-        </div>
-        <button className="mode-toggle" onClick={togglePersona}>
-          {persona === 'genie' ? '🎓 교수님 모드' : '🧞 지니 모드'}
-        </button>
-      </div>
-
-      <div className="chat-area" ref={chatAreaRef}>
-        {messages.map((msg, index) => (
-          <div key={index} className={`message ${msg.role}`}>
-            {msg.files && (
-              <div className="message-files">
-                {msg.files.map((file, i) => (
-                  <div key={i} className="file-preview">
-                    {file.preview ? <img src={file.preview} alt={file.name} /> : <div className="file-icon">📄</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="message-bubble">
-              {msg.content.split('\n').map((line, i) => <p key={i}>{line}</p>)}
-            </div>
-            {msg.role === 'assistant' && msg.canDownload && (
-              <div className="download-buttons">
-                <button className="download-btn pdf" onClick={() => handleDownloadPDF(msg.content)}>📄 PDF</button>
-              </div>
-            )}
-            <div className="message-time">
-              {msg.timestamp.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="message assistant">
-            <div className="typing-indicator"><span></span><span></span><span></span></div>
-          </div>
-        )}
-      </div>
-
-      <div className="input-area">
-        {isRecording && (
-          <div className="recording-indicator">
-            <div className="voice-waves">{[...Array(7)].map((_, i) => <div key={i} className="voice-wave"></div>)}</div>
-            <span>듣고 있습니다...</span>
-          </div>
-        )}
-
-        {uploadedFiles.length > 0 && (
-          <div className="uploaded-files">
-            {uploadedFiles.map((file, index) => (
-              <div key={index} className="uploaded-file">
-                {file.preview ? <img src={file.preview} alt={file.name} /> : <div className="file-icon-small">📄</div>}
-                <button className="remove-file" onClick={() => removeFile(index)}>×</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="input-tools">
-          <button className="tool-btn" onClick={handleCamera}><span className="tool-icon">📷</span><span className="tool-label">카메라</span></button>
-          <button className="tool-btn" onClick={handleFileSelect}><span className="tool-icon">📎</span><span className="tool-label">파일</span></button>
-          <button className={`tool-btn ${isRecording ? 'recording' : ''}`} onClick={toggleRecording}><span className="tool-icon">🎤</span><span className="tool-label">음성</span></button>
-          <button className={`tool-btn ${isVoiceMode ? 'active' : ''}`} onClick={toggleVoiceMode}><span className="tool-icon">🔊</span><span className="tool-label">보이스</span></button>
-        </div>
-
-        <div className="text-input-row">
-          <input type="text" className="text-input" placeholder="무엇을 도와드릴까요?" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={handleKeyPress} disabled={loading || isRecording} />
-          <button className="send-btn" onClick={() => handleSendMessage()} disabled={loading || isRecording || (!inputText.trim() && uploadedFiles.length === 0)}>➤</button>
-        </div>
-
-        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileChange} />
-        <input ref={fileInputRef} type="file" accept="image/*,.pdf" multiple style={{ display: 'none' }} onChange={handleFileChange} />
-      </div>
-    </div>
-  );
-}
-
-export default MagicBoxPage;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRe
