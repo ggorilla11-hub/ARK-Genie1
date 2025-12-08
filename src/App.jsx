@@ -3,7 +3,7 @@ import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './
 import HomePage from './pages/HomePage';
 import CustomerPage from './pages/CustomerPage';
 import MagicBoxPage from './pages/MagicBoxPage';
-import AgentPage from './pages/AgentPage';
+import AIGeniePage from './pages/AIGeniePage';
 import MyPage from './pages/MyPage';
 import './App.css';
 
@@ -67,11 +67,11 @@ function App() {
       case 'home':
         return <HomePage user={user} />;
       case 'customers':
-        return <CustomersPage user={user} />;
+        return <CustomerPage user={user} />;
       case 'magic':
         return <MagicBoxPage user={user} />;
       case 'agent':
-        return <AgentPage user={user} />;
+        return <AIGeniePage user={user} />;
       case 'my':
         return <MyPage user={user} onLogout={handleLogout} />;
       default:
@@ -92,6 +92,7 @@ function App() {
       <main className="main-content">
         {renderPage()}
       </main>
+
       <nav className="bottom-nav">
         <button className={getNavClass('home')} onClick={() => setCurrentPage('home')}>
           <span className="nav-icon">🏠</span>
@@ -107,7 +108,7 @@ function App() {
         </button>
         <button className={getNavClass('agent')} onClick={() => setCurrentPage('agent')}>
           <span className="nav-icon">🤖</span>
-          <span className="nav-label">에이전트</span>
+          <span className="nav-label">AI지니</span>
         </button>
         <button className={getNavClass('my')} onClick={() => setCurrentPage('my')}>
           <span className="nav-icon">👤</span>
