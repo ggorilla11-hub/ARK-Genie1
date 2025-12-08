@@ -16,7 +16,7 @@ function AgentPage({ user }) {
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    setLogs(prev => [...prev.slice(-30), { message, type, timestamp }]);
+    setLogs(prev => [...prev.slice(-50), { message, type, timestamp }]);
   };
 
   const startAgent = async () => {
@@ -47,22 +47,7 @@ function AgentPage({ user }) {
           type: 'session.update',
           session: {
             modalities: ['text', 'audio'],
-            instructions: `당신은 ARK 지니입니다. ${user?.displayName || '보험설계사'}님을 돕는 AI 음성 에이전트입니다.
-
-핵심 역할:
-- 보험설계사의 음성 명령을 듣고 업무 자동화 실행
-- 고객 전화 걸기, 문자/카톡 보내기, 일정 등록
-- 친절하고 전문적인 한국어 대화
-
-응답 규칙:
-- 짧고 명확하게 (1-2문장)
-- 명령 확인 후 실행
-- "네, 알겠습니다" 식의 자연스러운 응답
-
-예시 명령:
-- "김철수 고객에게 전화해줘" → 전화 기능 실행
-- "내일 3시 상담 예약" → 캘린더 등록
-- "이번 주 일정 알려줘" → 일정 조회`,
+            instructions: `당신은 ARK 지니입니다. ${user?.displayName || '보험설계사'}님을 돕는 AI 음성 에이전트입니다. 항상 한국어로 짧게 응답하세요.`,
             voice: 'shimmer',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
@@ -131,56 +116,80 @@ function AgentPage({ user }) {
   };
 
   const handleServerEvent = async (data) => {
+    console.log('서버 이벤트:', data.type);
+    
     switch (data.type) {
       case 'session.created':
         addLog('세션 생성됨', 'success');
         break;
 
       case 'session.updated':
-        setStatus('준비 완료');
-        addLog('설정 완료 - 말씀하세요!', 'success');
+        setStatus('준비 완료 - 말씀하세요!');
+        addLog('설정 완료!', 'success');
         startAudioCapture();
         break;
 
       case 'input_audio_buffer.speech_started':
         setIsListening(true);
         setIsSpeaking(false);
-        setStatus('듣는 중...');
+        setStatus('🎤 듣는 중...');
+        addLog('음성 감지됨', 'info');
         break;
 
       case 'input_audio_buffer.speech_stopped':
         setIsListening(false);
-        setStatus('처리 중...');
+        setStatus('🔄 처리 중...');
+        addLog('음성 종료 - 처리 시작', 'info');
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
         if (data.transcript) {
-          addLog(`🗣️ ${data.transcript}`, 'user');
+          addLog(`🗣️ "${data.transcript}"`, 'user');
+          setStatus(`인식: ${data.transcript}`);
+        }
+        break;
+
+      case 'response.created':
+        addLog('응답 생성 시작', 'info');
+        break;
+
+      case 'response.audio_transcript.delta':
+        if (data.delta) {
+          console.log('응답 텍스트:', data.delta);
         }
         break;
 
       case 'response.audio_transcript.done':
         if (data.transcript) {
-          addLog(`🧞 ${data.transcript}`, 'assistant');
+          addLog(`🧞 "${data.transcript}"`, 'assistant');
         }
         break;
 
       case 'response.audio.delta':
         setIsSpeaking(true);
-        setStatus('말하는 중...');
+        setStatus('🔊 말하는 중...');
         playAudio(data.delta);
         break;
 
       case 'response.audio.done':
         setTimeout(() => {
           setIsSpeaking(false);
-          setStatus('듣는 중...');
-        }, 300);
+          setStatus('준비 완료 - 말씀하세요!');
+        }, 500);
+        break;
+
+      case 'response.done':
+        addLog('응답 완료', 'success');
         break;
 
       case 'error':
-        addLog(`오류: ${data.error?.message || '알 수 없는 오류'}`, 'error');
+        const errorMsg = data.error?.message || '알 수 없는 오류';
+        addLog(`❌ 오류: ${errorMsg}`, 'error');
+        setStatus(`오류: ${errorMsg}`);
         break;
+
+      default:
+        console.log('기타 이벤트:', data.type);
     }
   };
 
@@ -207,6 +216,7 @@ function AgentPage({ user }) {
       
       source.connect(processor);
       processor.connect(audioContextRef.current.destination);
+      addLog('오디오 캡처 시작', 'success');
       
     } catch (error) {
       console.error('Audio capture error:', error);
@@ -288,16 +298,6 @@ function AgentPage({ user }) {
             </button>
           )}
         </div>
-
-        <div className="agent-hints">
-          <p className="hints-title">💡 이렇게 말해보세요</p>
-          <div className="hints-list">
-            <span className="hint-item">"안녕 지니"</span>
-            <span className="hint-item">"김철수 고객에게 전화해줘"</span>
-            <span className="hint-item">"내일 오후 3시 상담 예약"</span>
-            <span className="hint-item">"이번 주 일정 알려줘"</span>
-          </div>
-        </div>
       </div>
 
       <div className="agent-logs">
@@ -307,7 +307,7 @@ function AgentPage({ user }) {
         </div>
         <div className="logs-content">
           {logs.length === 0 ? (
-            <div className="logs-empty">에이전트를 시작하면 대화가 여기에 표시됩니다.</div>
+            <div className="logs-empty">대화가 여기에 표시됩니다</div>
           ) : (
             logs.map((log, i) => (
               <div key={i} className={`log-item ${log.type}`}>
