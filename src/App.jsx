@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
 import HomePage from './pages/HomePage';
-import CustomersPage from './pages/CustomersPage';
+import CustomerPage from './pages/CustomerPage';
 import MagicBoxPage from './pages/MagicBoxPage';
 import AgentPage from './pages/AgentPage';
 import MyPage from './pages/MyPage';
