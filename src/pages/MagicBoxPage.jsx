@@ -24,4 +24,4 @@ function MagicBoxPage({ user }) {
   const consultRecorderRef = useRef(null);
   const consultChunksRef = useRef([]);
   const currentAudioRef = useRef(null);
-  const isProcessingRef = useRef
+  const isProcessingRef = useRef(false);
