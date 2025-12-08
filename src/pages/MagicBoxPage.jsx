@@ -26,7 +26,6 @@ function MagicBoxPage({ user }) {
   const voiceModeRef = useRef(false);
   const micModeRef = useRef(false);
   const silenceTimeoutRef = useRef(null);
-  const accumulatedTranscriptRef = useRef('');
 
   useEffect(() => {
     const savedMessages = localStorage.getItem('arkgenie_messages');
@@ -72,7 +71,7 @@ function MagicBoxPage({ user }) {
   const showGreeting = () => {
     const greeting = persona === 'genie'
       ? `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니입니다.\n\n📷 촬영 - 서류 촬영 분석\n📎 파일 - 문서 첨부\n🎤 마이크 - 음성 질문\n🔊 보이스 - 음성 대화\n⏺️ 녹음 - 상담 녹음\n\n무엇을 도와드릴까요?`
-      : `${user?.displayName || '설계사'}님, 반갑습니다!\n\n오상열 교수입니다.\nCFP(국제공인재무설계사)로서 자네의 성장을 돕겠네.\n\n무엇이든 물어보게!`;
+      : `${user?.displayName || '설계사'}님, 반갑습니다!\n\n오상열 교수입니다.\nCFP(국제공인재무설계사)로서 여러분의 성장을 돕겠습니다.\n\n무엇이든 물어보세요!`;
     setMessages([{ role: 'assistant', content: greeting, timestamp: new Date() }]);
   };
 
@@ -182,44 +181,52 @@ function MagicBoxPage({ user }) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'ko-KR';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognitionRef.current = recognition;
-    accumulatedTranscriptRef.current = '';
     const currentFiles = [...uploadedFiles];
+    let finalTranscript = '';
 
     recognition.onstart = () => { setIsListening(true); setCurrentTranscript(''); };
+    
     recognition.onresult = (event) => {
-      let interim = '', final = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      let interim = '';
+      for (let i = 0; i < event.results.length; i++) {
         const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) final += t; else interim += t;
+        if (event.results[i].isFinal) {
+          finalTranscript = t;
+        } else {
+          interim = t;
+        }
       }
-      if (final) accumulatedTranscriptRef.current += final;
-      setCurrentTranscript(accumulatedTranscriptRef.current + interim);
+      setCurrentTranscript(finalTranscript || interim);
+      
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = setTimeout(() => {
-        if (accumulatedTranscriptRef.current.trim() && recognitionRef.current) {
+        if (recognitionRef.current) {
           try { recognitionRef.current.stop(); } catch(e) {}
         }
       }, 2000);
     };
+    
     recognition.onerror = (event) => {
       if (event.error === 'no-speech' && ((mode === 'voice' && voiceModeRef.current) || (mode === 'mic' && micModeRef.current))) {
         setTimeout(() => startListening(mode), 300);
       }
     };
+    
     recognition.onend = () => {
       setIsListening(false);
       setCurrentTranscript('');
       if (silenceTimeoutRef.current) { clearTimeout(silenceTimeoutRef.current); silenceTimeoutRef.current = null; }
-      const finalText = accumulatedTranscriptRef.current.trim();
-      accumulatedTranscriptRef.current = '';
-      if (finalText) processWithFiles(finalText, mode, currentFiles);
-      else if ((mode === 'voice' && voiceModeRef.current && !isSpeaking) || (mode === 'mic' && micModeRef.current)) {
+      
+      if (finalTranscript.trim()) {
+        processWithFiles(finalTranscript.trim(), mode, currentFiles);
+      } else if ((mode === 'voice' && voiceModeRef.current && !isSpeaking) || (mode === 'mic' && micModeRef.current)) {
         setTimeout(() => startListening(mode), 300);
       }
     };
+    
     try { recognition.start(); } catch(e) {}
   };
 
