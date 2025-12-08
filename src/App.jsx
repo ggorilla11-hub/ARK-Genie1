@@ -1,40 +1,39 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase';
-import LoginScreen from './pages/LoginScreen';
+import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
 import HomePage from './pages/HomePage';
-import CustomerPage from './pages/CustomerPage';
+import CustomersPage from './pages/CustomersPage';
 import MagicBoxPage from './pages/MagicBoxPage';
-import AIGeniePage from './pages/AIGeniePage';
+import AgentPage from './pages/AgentPage';
 import MyPage from './pages/MyPage';
-import BottomNav from './components/BottomNav';
-import TopInfoBar from './components/TopInfoBar';
 import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [currentPage, setCurrentPage] = useState('magic');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
-      if (user && location.pathname === '/') {
-        navigate('/magicbox');
-      }
     });
     return () => unsubscribe();
   }, []);
 
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      navigate('/');
+      setCurrentPage('magic');
     } catch (error) {
-      console.error('로그아웃 오류:', error);
+      console.error('Logout error:', error);
     }
   };
 
@@ -42,33 +41,37 @@ function App() {
     return (
       <div className="loading-screen">
         <div className="loading-spinner"></div>
-        <p>로딩중...</p>
+        <p>로딩 중...</p>
       </div>
     );
   }
 
   if (!user) {
-    return <LoginScreen onLoginSuccess={setUser} />;
+    return (
+      <div className="login-screen">
+        <div className="login-container">
+          <div className="login-logo">🧞</div>
+          <h1>ARK 지니</h1>
+          <p>보험설계사를 위한 AI 어시스턴트</p>
+          <button className="login-btn" onClick={handleLogin}>
+            <img src="https://www.google.com/favicon.ico" alt="Google" />
+            Google로 로그인
+          </button>
+        </div>
+      </div>
+    );
   }
 
-  const showNav = location.pathname !== '/';
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home': return <HomePage user={user} />;
+      case 'customers': return <CustomersPage user={user} />;
+      case 'magic': return <MagicBoxPage user={user} />;
+      case 'agent': return <AgentPage user={user} />;
+      case 'my': return <MyPage user={user} onLogout={handleLogout} />;
+      default: return <MagicBoxPage user={user} />;
+    }
+  };
 
   return (
-    <div className="app-container">
-      {showNav && <TopInfoBar />}
-      <main className="main-content">
-        <Routes>
-          <Route path="/" element={<LoginScreen onLoginSuccess={setUser} />} />
-          <Route path="/home" element={<HomePage user={user} />} />
-          <Route path="/customer" element={<CustomerPage user={user} />} />
-          <Route path="/magicbox" element={<MagicBoxPage user={user} />} />
-          <Route path="/aigenie" element={<AIGeniePage user={user} />} />
-          <Route path="/mypage" element={<MyPage user={user} onLogout={handleLogout} />} />
-        </Routes>
-      </main>
-      {showNav && <BottomNav />}
-    </div>
-  );
-}
-
-export default App;
+    <div className="app">
