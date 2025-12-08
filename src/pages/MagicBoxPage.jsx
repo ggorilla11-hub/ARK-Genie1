@@ -70,9 +70,15 @@ function MagicBoxPage({ user }) {
   };
 
   const showGreeting = () => {
-    const greeting = `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니입니다.\n\n📷 촬영 - 서류 촬영 분석\n📎 파일 - 문서 첨부\n🎤 마이크 - 음성 질문\n🔊 보이스 - 음성 대화\n⏺️ 녹음 - 상담 녹음\n\n무엇을 도와드릴까요?`;
+    const greeting = persona === 'genie'
+      ? `안녕하세요, ${user?.displayName || '설계사'}님! 👋\n\n저는 ARK 지니입니다.\n\n📷 촬영 - 서류 촬영 분석\n📎 파일 - 문서 첨부\n🎤 마이크 - 음성 질문\n🔊 보이스 - 음성 대화\n⏺️ 녹음 - 상담 녹음\n\n무엇을 도와드릴까요?`
+      : `${user?.displayName || '설계사'}님, 반갑습니다!\n\n오상열 교수입니다.\nCFP(국제공인재무설계사)로서 자네의 성장을 돕겠네.\n\n무엇이든 물어보게!`;
     setMessages([{ role: 'assistant', content: greeting, timestamp: new Date() }]);
   };
+
+  useEffect(() => {
+    showGreeting();
+  }, [persona]);
 
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -310,6 +316,7 @@ function MagicBoxPage({ user }) {
   const handleTextSubmit = () => { if (inputText.trim()) { handleSendMessage(inputText); setInputText(''); } };
   const handleKeyPress = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleTextSubmit(); } };
   const clearChat = () => { localStorage.removeItem('arkgenie_messages'); localStorage.removeItem('arkgenie_messages_time'); showGreeting(); };
+  const togglePersona = () => setPersona(p => p === 'genie' ? 'professor' : 'genie');
 
   return (
     <div className="magicbox-page">
@@ -321,6 +328,9 @@ function MagicBoxPage({ user }) {
         </div>
         <div className="header-right">
           <button className="clear-btn" onClick={clearChat} title="대화 초기화">🗑️</button>
+          <button className="mode-toggle" onClick={togglePersona}>
+            {persona === 'genie' ? '🎓 교수님' : '🧞 지니'}
+          </button>
         </div>
       </div>
 
