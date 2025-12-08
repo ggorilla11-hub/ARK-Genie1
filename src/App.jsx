@@ -13,8 +13,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState('magic');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -64,14 +64,58 @@ function App() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'home': return <HomePage user={user} />;
-      case 'customers': return <CustomersPage user={user} />;
-      case 'magic': return <MagicBoxPage user={user} />;
-      case 'agent': return <AgentPage user={user} />;
-      case 'my': return <MyPage user={user} onLogout={handleLogout} />;
-      default: return <MagicBoxPage user={user} />;
+      case 'home':
+        return <HomePage user={user} />;
+      case 'customers':
+        return <CustomersPage user={user} />;
+      case 'magic':
+        return <MagicBoxPage user={user} />;
+      case 'agent':
+        return <AgentPage user={user} />;
+      case 'my':
+        return <MyPage user={user} onLogout={handleLogout} />;
+      default:
+        return <MagicBoxPage user={user} />;
     }
+  };
+
+  const getNavClass = (page) => {
+    return currentPage === page ? 'nav-item active' : 'nav-item';
+  };
+
+  const getMagicNavClass = () => {
+    return currentPage === 'magic' ? 'nav-item main-nav active' : 'nav-item main-nav';
   };
 
   return (
     <div className="app">
+      <main className="main-content">
+        {renderPage()}
+      </main>
+      <nav className="bottom-nav">
+        <button className={getNavClass('home')} onClick={() => setCurrentPage('home')}>
+          <span className="nav-icon">🏠</span>
+          <span className="nav-label">홈</span>
+        </button>
+        <button className={getNavClass('customers')} onClick={() => setCurrentPage('customers')}>
+          <span className="nav-icon">👥</span>
+          <span className="nav-label">고객</span>
+        </button>
+        <button className={getMagicNavClass()} onClick={() => setCurrentPage('magic')}>
+          <span className="nav-icon-main">🧞</span>
+          <span className="nav-label">매직박스</span>
+        </button>
+        <button className={getNavClass('agent')} onClick={() => setCurrentPage('agent')}>
+          <span className="nav-icon">🤖</span>
+          <span className="nav-label">에이전트</span>
+        </button>
+        <button className={getNavClass('my')} onClick={() => setCurrentPage('my')}>
+          <span className="nav-icon">👤</span>
+          <span className="nav-label">마이</span>
+        </button>
+      </nav>
+    </div>
+  );
+}
+
+export default App;
