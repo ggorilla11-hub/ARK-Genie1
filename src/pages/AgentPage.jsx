@@ -63,7 +63,7 @@ function AgentPage({ user }) {
 - "김철수 고객에게 전화해줘" → 전화 기능 실행
 - "내일 3시 상담 예약" → 캘린더 등록
 - "이번 주 일정 알려줘" → 일정 조회`,
-            voice: 'nova',
+            voice: 'shimmer',
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
             input_audio_transcription: { model: 'whisper-1' },
