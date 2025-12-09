@@ -19,7 +19,6 @@ function AgentPage({ user }) {
   const messagesEndRef = useRef(null);
   const timelineRef = useRef(null);
 
-  // 메시지 스크롤
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -28,7 +27,6 @@ function AgentPage({ user }) {
     scrollToBottom();
   }, [messages]);
 
-  // 타임라인 스크롤
   useEffect(() => {
     if (timelineRef.current) {
       timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
@@ -45,15 +43,15 @@ function AgentPage({ user }) {
     setMessages(prev => [...prev, { text, isUser, time }]);
   };
 
-  const addTimeline = (text, icon = '📋', status = 'pending') => {
+  const addTimeline = (text, icon = '📋', statusVal = 'pending') => {
     const id = Date.now();
-    setTimeline(prev => [...prev, { id, text, icon, status }]);
+    setTimeline(prev => [...prev, { id, text, icon, status: statusVal }]);
     return id;
   };
 
-  const updateTimeline = (id, status) => {
+  const updateTimeline = (id, newStatus) => {
     setTimeline(prev => prev.map(item => 
-      item.id === id ? { ...item, status } : item
+      item.id === id ? { ...item, status: newStatus } : item
     ));
   };
 
@@ -160,7 +158,6 @@ function AgentPage({ user }) {
     switch (data.type) {
       case 'session.created':
         addLog('세션 생성됨', 'success');
-        updateTimeline(timeline[timeline.length - 1]?.id, 'done');
         break;
 
       case 'session.updated':
@@ -224,7 +221,6 @@ function AgentPage({ user }) {
 
       case 'response.done':
         addLog('응답 완료', 'success');
-        // 마지막 loading 상태인 타임라인 아이템을 done으로 변경
         setTimeline(prev => prev.map(item => 
           item.status === 'loading' ? { ...item, status: 'done' } : item
         ));
@@ -336,7 +332,6 @@ function AgentPage({ user }) {
       {/* 헤더 */}
       <div className="agent-header">
         <div className="header-avatar">
-          <img src="/genie-icon.png" alt="AI 지니" onError={(e) => e.target.style.display = 'none'} />
           <span className="header-avatar-fallback">🤖</span>
         </div>
         <div className="header-info">
@@ -381,7 +376,6 @@ function AgentPage({ user }) {
 
       {/* 입력 영역 */}
       <div className="input-section">
-        {/* 기능 버튼들 */}
         <div className="action-buttons">
           <button className="action-btn">
             <span>📷</span>
@@ -405,7 +399,6 @@ function AgentPage({ user }) {
           </button>
         </div>
 
-        {/* 텍스트 입력 */}
         <div className="text-input-wrapper">
           <input
             type="text"
