@@ -1,23 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
 
+const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
+
 function AgentPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('대기중');
   const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  // 스크롤 자동 이동
   useEffect(() => {
     if (chatAreaRef.current) {
       chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // 메시지 추가
   const addMessage = (text, isUser, cardData = null) => {
     const newMsg = {
       id: Date.now(),
@@ -29,323 +31,209 @@ function AgentPage() {
     setMessages(prev => [...prev, newMsg]);
   };
 
-  // 음성 인식
-  const toggleVoice = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('음성 인식을 지원하지 않는 브라우저입니다.');
+  // 전화 걸기
+  const makeCall = async (name, phone) => {
+    setIsProcessing(true);
+    setStatus('전화 연결중...');
+    addMessage(`${name}님께 전화를 연결합니다...`, false);
+
+    try {
+      const formattedPhone = phone.replace(/-/g, '');
+      const fullPhone = formattedPhone.startsWith('0') 
+        ? '+82' + formattedPhone.slice(1) 
+        : formattedPhone;
+
+      const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`);
+      const data = await response.json();
+
+      if (data.success) {
+        addMessage(`✅ ${name}님께 전화 연결 성공!`, false, {
+          type: 'call',
+          name,
+          phone,
+          status: '연결됨',
+          callSid: data.callSid
+        });
+        setStatus('통화중');
+      } else {
+        addMessage(`❌ 전화 연결 실패: ${data.error}`, false);
+        setStatus('대기중');
+      }
+    } catch (error) {
+      addMessage(`❌ 전화 연결 실패: ${error.message}`, false);
+      setStatus('대기중');
+    }
+    setIsProcessing(false);
+  };
+
+  // 음성 인식 시작
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
       return;
     }
 
-    if (isListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.lang = 'ko-KR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.lang = 'ko-KR';
-    recognitionRef.current.continuous = false;
-
-    recognitionRef.current.onstart = () => {
+    recognition.onstart = () => {
       setIsListening(true);
-      setStatus('듣는중');
+      setStatus('듣는중...');
     };
 
-    recognitionRef.current.onresult = (e) => {
-      const text = e.results[0][0].transcript;
-      setInputText(text);
-      handleSend(text);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      processVoiceCommand(transcript);
     };
 
-    recognitionRef.current.onend = () => {
+    recognition.onerror = () => {
       setIsListening(false);
       setStatus('대기중');
     };
 
-    recognitionRef.current.start();
+    recognition.onend = () => {
+      setIsListening(false);
+      setStatus('대기중');
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
 
-  // 명령어 분석
-  const analyzeCommand = (text) => {
-    const lower = text.toLowerCase();
-    
-    // 고객명 추출
-    const nameMatch = text.match(/([가-힣]{2,4})(?:에게|한테|고객|님)/);
-    const customerName = nameMatch ? nameMatch[1] : null;
-    
-    // 전화번호 추출
-    const phoneMatch = text.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
-    const phoneNumber = phoneMatch ? phoneMatch[1].replace(/[-\s]/g, '') : null;
+  // 음성 명령 처리
+  const processVoiceCommand = (command) => {
+    addMessage(command, true);
 
-    if (lower.includes('전화') || lower.includes('콜')) {
-      return { action: 'call', customerName, phoneNumber };
+    if (!customerName || !customerPhone) {
+      addMessage('먼저 고객 정보(이름, 연락처)를 입력해주세요.', false);
+      return;
     }
-    if (lower.includes('기록') || lower.includes('시트') || lower.includes('저장')) {
-      return { action: 'sheet', customerName };
-    }
-    if (lower.includes('일정') || lower.includes('캘린더') || lower.includes('예약')) {
-      return { action: 'calendar', customerName };
-    }
-    if (lower.includes('카톡') || lower.includes('카카오') || lower.includes('문자')) {
-      return { action: 'message', customerName, phoneNumber };
-    }
-    
-    return { action: 'chat', customerName };
-  };
 
-  // API 호출: 전화
-  const makeCall = async (name, phone) => {
-    try {
-      const res = await fetch('/api/call', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone })
-      });
-      const data = await res.json();
-      return data;
-    } catch (error) {
-      return { success: false, error: error.message };
+    if (command.includes('전화') || command.includes('콜') || command.includes('연결')) {
+      makeCall(customerName, customerPhone);
+    } else if (command.includes('예약') || command.includes('일정') || command.includes('약속')) {
+      addMessage(`📅 ${customerName}님 일정 등록 기능 준비중...`, false);
+    } else if (command.includes('기록') || command.includes('시트') || command.includes('저장')) {
+      addMessage(`📊 ${customerName}님 정보 기록 기능 준비중...`, false);
+    } else if (command.includes('문자') || command.includes('카톡') || command.includes('메시지')) {
+      addMessage(`💬 ${customerName}님께 메시지 발송 기능 준비중...`, false);
+    } else {
+      addMessage(`네, 교수님. "${command}" 명령을 처리하겠습니다.`, false);
     }
   };
 
-  // API 호출: 시트 기록
-  const recordSheet = async (name, phone, content) => {
-    try {
-      const res = await fetch('/api/sheet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          name, 
-          phone, 
-          content, 
-          status: '상담예약',
-          next_action: '방문상담'
-        })
-      });
-      const data = await res.json();
-      return data;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // API 호출: 캘린더
-  const createCalendarEvent = async (name) => {
-    try {
-      const res = await fetch('/api/calendar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: `${name} 고객 상담`,
-          description: '보험 상담'
-        })
-      });
-      const data = await res.json();
-      return data;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // API 호출: AI 채팅
-  const chatWithAI = async (message) => {
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
-      });
-      const data = await res.json();
-      return data;
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // 메시지 전송 처리
-  const handleSend = async (voiceText = null) => {
-    const text = voiceText || inputText.trim();
-    if (!text) return;
-
+  // 텍스트 전송
+  const handleSend = () => {
+    if (!inputText.trim()) return;
+    processVoiceCommand(inputText);
     setInputText('');
-    addMessage(text, true);
-    setIsProcessing(true);
-    setStatus('처리중');
-
-    const command = analyzeCommand(text);
-
-    try {
-      if (command.action === 'call') {
-        if (!command.phoneNumber) {
-          addMessage('전화번호를 말씀해주세요. 예: "홍길동 010-1234-5678에게 전화해줘"', false);
-        } else {
-          addMessage(`${command.customerName || '고객'}님께 전화를 연결합니다...`, false);
-          const result = await makeCall(command.customerName, command.phoneNumber);
-          if (result.success) {
-            addMessage(`✅ 전화 연결 완료!`, false, {
-              type: 'call',
-              name: command.customerName,
-              phone: command.phoneNumber,
-              status: '연결됨'
-            });
-          } else {
-            addMessage(`❌ 전화 연결 실패: ${result.error}`, false);
-          }
-        }
-      } 
-      else if (command.action === 'sheet') {
-        if (!command.customerName) {
-          addMessage('고객명을 말씀해주세요. 예: "홍길동 고객 기록해줘"', false);
-        } else {
-          addMessage(`${command.customerName} 고객 정보를 기록합니다...`, false);
-          const result = await recordSheet(command.customerName, command.phoneNumber, '상담 진행');
-          if (result.success) {
-            addMessage(`✅ 고객현황판에 기록 완료!`, false, {
-              type: 'sheet',
-              name: command.customerName,
-              status: '저장됨'
-            });
-          } else {
-            addMessage(`❌ 기록 실패: ${result.error}`, false);
-          }
-        }
-      }
-      else if (command.action === 'calendar') {
-        if (!command.customerName) {
-          addMessage('고객명을 말씀해주세요. 예: "홍길동 고객 일정 잡아줘"', false);
-        } else {
-          addMessage(`${command.customerName} 고객 상담 일정을 등록합니다...`, false);
-          const result = await createCalendarEvent(command.customerName);
-          if (result.success) {
-            addMessage(`✅ 캘린더에 일정 등록 완료!`, false, {
-              type: 'calendar',
-              name: command.customerName,
-              status: '등록됨'
-            });
-          } else {
-            addMessage(`❌ 일정 등록 실패: ${result.error}`, false);
-          }
-        }
-      }
-      else if (command.action === 'message') {
-        addMessage('카카오톡/문자 발송 기능은 준비 중입니다.', false);
-      }
-      else {
-        // AI 대화
-        const result = await chatWithAI(text);
-        if (result.success) {
-          addMessage(result.message, false);
-        } else {
-          addMessage('죄송해요, 오류가 발생했어요.', false);
-        }
-      }
-    } catch (error) {
-      addMessage(`오류가 발생했습니다: ${error.message}`, false);
-    }
-
-    setIsProcessing(false);
-    setStatus('대기중');
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !isProcessing) {
-      handleSend();
-    }
   };
 
   return (
     <div className="agent-page">
-      {/* 헤더 */}
-      <div className="agent-header">
-        <div className="agent-avatar">🧞</div>
-        <div className="agent-info">
+      <header className="agent-header">
+        <div className="header-icon">🧞</div>
+        <div className="header-info">
           <h1>AI 지니</h1>
           <p>실제 작동 • 전화/시트/캘린더</p>
         </div>
-        <div className={`agent-status ${status === '듣는중' ? 'listening' : status === '처리중' ? 'processing' : ''}`}>
+        <div className={`status-badge ${isListening ? 'listening' : isProcessing ? 'processing' : ''}`}>
           {status}
         </div>
+      </header>
+
+      {/* 고객 정보 입력 */}
+      <div className="customer-input-section">
+        <h3>📋 고객 정보</h3>
+        <div className="customer-inputs">
+          <input
+            type="text"
+            placeholder="고객 이름"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+          />
+          <input
+            type="tel"
+            placeholder="연락처 (010-1234-5678)"
+            value={customerPhone}
+            onChange={(e) => setCustomerPhone(e.target.value)}
+          />
+        </div>
+        {customerName && customerPhone && (
+          <div className="customer-ready">
+            ✅ {customerName}님 ({customerPhone}) 준비됨
+          </div>
+        )}
       </div>
 
       {/* 채팅 영역 */}
       <div className="chat-area" ref={chatAreaRef}>
         {messages.length === 0 ? (
           <div className="welcome-message">
-            <div className="welcome-icon">🧞‍♂️</div>
+            <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>실제로 전화를 걸고, 시트에 기록하고,<br/>캘린더에 일정을 등록합니다.</p>
+            <p>고객 정보를 입력하고 음성으로 명령해주세요.</p>
             <div className="example-commands">
               <p>💡 이렇게 말해보세요:</p>
-              <span>"홍길동 010-1234-5678에게 전화해줘"</span>
-              <span>"김철수 고객 시트에 기록해줘"</span>
-              <span>"박영희 고객 일정 잡아줘"</span>
+              <span>"전화 연결해줘"</span>
+              <span>"일정 잡아줘"</span>
+              <span>"시트에 기록해줘"</span>
             </div>
           </div>
         ) : (
           messages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'bot'}`}>
-              {!msg.isUser && <div className="msg-avatar">🧞</div>}
-              <div className="msg-content">
-                <div className="msg-bubble">{msg.text}</div>
+            <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
+              <div className="message-content">
+                <p>{msg.text}</p>
                 {msg.cardData && (
                   <div className={`action-card ${msg.cardData.type}`}>
-                    <div className="card-icon">
-                      {msg.cardData.type === 'call' && '📞'}
-                      {msg.cardData.type === 'sheet' && '📊'}
-                      {msg.cardData.type === 'calendar' && '📅'}
-                    </div>
-                    <div className="card-info">
-                      <span className="card-title">{msg.cardData.name}</span>
-                      <span className="card-status">{msg.cardData.status}</span>
-                    </div>
+                    {msg.cardData.type === 'call' && (
+                      <>
+                        <span className="card-icon">📞</span>
+                        <span>{msg.cardData.name}님 통화</span>
+                        <span className="card-status">{msg.cardData.status}</span>
+                      </>
+                    )}
                   </div>
                 )}
-                <div className="msg-time">{msg.time}</div>
+                <span className="message-time">{msg.time}</span>
               </div>
             </div>
           ))
         )}
-        {isProcessing && (
-          <div className="message bot">
-            <div className="msg-avatar">🧞</div>
-            <div className="typing-indicator">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        )}
+      </div>
+
+      {/* 빠른 액션 버튼 */}
+      <div className="quick-actions">
+        <button onClick={() => customerName && customerPhone && makeCall(customerName, customerPhone)} 
+                disabled={!customerName || !customerPhone || isProcessing}>
+          📞 전화
+        </button>
+        <button disabled>📊 기록</button>
+        <button disabled>📅 일정</button>
       </div>
 
       {/* 입력 영역 */}
       <div className="input-area">
-        <div className="quick-buttons">
-          <button onClick={() => setInputText('홍길동 010-1234-5678에게 전화해줘')}>📞 전화</button>
-          <button onClick={() => setInputText('홍길동 고객 시트에 기록해줘')}>📊 기록</button>
-          <button onClick={() => setInputText('홍길동 고객 일정 잡아줘')}>📅 일정</button>
-        </div>
-        <div className="input-row">
-          <button 
-            className={`voice-btn ${isListening ? 'active' : ''}`} 
-            onClick={toggleVoice}
-            disabled={isProcessing}
-          >
-            🎤
-          </button>
-          <input
-            type="text"
-            placeholder="지니야, 홍길동에게 전화해줘..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isProcessing}
-          />
-          <button 
-            className="send-btn" 
-            onClick={() => handleSend()}
-            disabled={isProcessing || !inputText.trim()}
-          >
-            ▶
-          </button>
-        </div>
+        <button 
+          className={`voice-btn ${isListening ? 'listening' : ''}`}
+          onClick={startListening}
+          disabled={isProcessing}
+        >
+          🎤
+        </button>
+        <input
+          type="text"
+          placeholder="지니야, 전화 연결해줘..."
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+        />
+        <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
+          ▶
+        </button>
       </div>
     </div>
   );
