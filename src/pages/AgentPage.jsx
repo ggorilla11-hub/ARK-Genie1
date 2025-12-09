@@ -6,23 +6,62 @@ function AgentPage({ user }) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [status, setStatus] = useState('대기 중');
+  const [status, setStatus] = useState('대기중');
   const [logs, setLogs] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [textInput, setTextInput] = useState('');
+  const [timeline, setTimeline] = useState([]);
   
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const playbackContextRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const timelineRef = useRef(null);
+
+  // 메시지 스크롤
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // 타임라인 스크롤
+  useEffect(() => {
+    if (timelineRef.current) {
+      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+    }
+  }, [timeline]);
 
   const addLog = (message, type = 'info') => {
     const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     setLogs(prev => [...prev.slice(-50), { message, type, timestamp }]);
   };
 
+  const addMessage = (text, isUser = false) => {
+    const time = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    setMessages(prev => [...prev, { text, isUser, time }]);
+  };
+
+  const addTimeline = (text, icon = '📋', status = 'pending') => {
+    const id = Date.now();
+    setTimeline(prev => [...prev, { id, text, icon, status }]);
+    return id;
+  };
+
+  const updateTimeline = (id, status) => {
+    setTimeline(prev => prev.map(item => 
+      item.id === id ? { ...item, status } : item
+    ));
+  };
+
   const startAgent = async () => {
     try {
       setStatus('마이크 연결 중...');
       addLog('에이전트 시작...', 'info');
+      addTimeline('에이전트 초기화', '🚀', 'loading');
 
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: { sampleRate: 24000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
@@ -76,7 +115,7 @@ function AgentPage({ user }) {
       ws.onclose = () => {
         setIsConnected(false);
         setIsActive(false);
-        setStatus('연결 종료');
+        setStatus('대기중');
         addLog('연결 종료됨', 'info');
       };
 
@@ -111,7 +150,7 @@ function AgentPage({ user }) {
     setIsConnected(false);
     setIsListening(false);
     setIsSpeaking(false);
-    setStatus('대기 중');
+    setStatus('대기중');
     addLog('에이전트 종료', 'info');
   };
 
@@ -121,36 +160,40 @@ function AgentPage({ user }) {
     switch (data.type) {
       case 'session.created':
         addLog('세션 생성됨', 'success');
+        updateTimeline(timeline[timeline.length - 1]?.id, 'done');
         break;
 
       case 'session.updated':
-        setStatus('준비 완료 - 말씀하세요!');
+        setStatus('준비완료');
         addLog('설정 완료!', 'success');
+        addTimeline('음성 인식 준비 완료', '✅', 'done');
         startAudioCapture();
         break;
 
       case 'input_audio_buffer.speech_started':
         setIsListening(true);
         setIsSpeaking(false);
-        setStatus('🎤 듣는 중...');
+        setStatus('듣는중');
         addLog('음성 감지됨', 'info');
         break;
 
       case 'input_audio_buffer.speech_stopped':
         setIsListening(false);
-        setStatus('🔄 처리 중...');
+        setStatus('처리중');
         addLog('음성 종료 - 처리 시작', 'info');
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
         if (data.transcript) {
           addLog(`🗣️ "${data.transcript}"`, 'user');
-          setStatus(`인식: ${data.transcript}`);
+          addMessage(data.transcript, true);
+          addTimeline(`음성 인식: "${data.transcript.slice(0, 20)}..."`, '🎤', 'done');
         }
         break;
 
       case 'response.created':
         addLog('응답 생성 시작', 'info');
+        addTimeline('AI 응답 생성 중...', '🧠', 'loading');
         break;
 
       case 'response.audio_transcript.delta':
@@ -162,30 +205,36 @@ function AgentPage({ user }) {
       case 'response.audio_transcript.done':
         if (data.transcript) {
           addLog(`🧞 "${data.transcript}"`, 'assistant');
+          addMessage(data.transcript, false);
         }
         break;
 
       case 'response.audio.delta':
         setIsSpeaking(true);
-        setStatus('🔊 말하는 중...');
+        setStatus('말하는중');
         playAudio(data.delta);
         break;
 
       case 'response.audio.done':
         setTimeout(() => {
           setIsSpeaking(false);
-          setStatus('준비 완료 - 말씀하세요!');
+          setStatus('준비완료');
         }, 500);
         break;
 
       case 'response.done':
         addLog('응답 완료', 'success');
+        // 마지막 loading 상태인 타임라인 아이템을 done으로 변경
+        setTimeline(prev => prev.map(item => 
+          item.status === 'loading' ? { ...item, status: 'done' } : item
+        ));
         break;
 
       case 'error':
         const errorMsg = data.error?.message || '알 수 없는 오류';
         addLog(`❌ 오류: ${errorMsg}`, 'error');
-        setStatus(`오류: ${errorMsg}`);
+        setStatus('오류 발생');
+        addTimeline(`오류: ${errorMsg}`, '❌', 'error');
         break;
 
       default:
@@ -255,64 +304,140 @@ function AgentPage({ user }) {
     }
   };
 
+  const handleTextSubmit = () => {
+    if (!textInput.trim()) return;
+    
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      addMessage(textInput, true);
+      addTimeline(`텍스트 전송: "${textInput.slice(0, 15)}..."`, '💬', 'done');
+      
+      wsRef.current.send(JSON.stringify({
+        type: 'conversation.item.create',
+        item: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: textInput }]
+        }
+      }));
+      wsRef.current.send(JSON.stringify({ type: 'response.create' }));
+      setTextInput('');
+    } else {
+      addMessage(textInput, true);
+      setTextInput('');
+    }
+  };
+
   useEffect(() => {
     return () => stopAgent();
   }, []);
 
   return (
     <div className="agent-page">
+      {/* 헤더 */}
       <div className="agent-header">
-        <span className="header-icon">🤖</span>
-        <span className="header-title">AI 에이전트</span>
-        <span className={`status-badge ${isConnected ? 'connected' : ''}`}>
-          {isConnected ? '● 연결됨' : '○ 오프라인'}
-        </span>
+        <div className="header-avatar">
+          <img src="/genie-icon.png" alt="AI 지니" onError={(e) => e.target.style.display = 'none'} />
+          <span className="header-avatar-fallback">🤖</span>
+        </div>
+        <div className="header-info">
+          <span className="header-title">AI 지니</span>
+          <span className="header-subtitle">음성 에이전트</span>
+        </div>
+        <button 
+          className={`status-badge ${isActive ? (isListening ? 'listening' : isSpeaking ? 'speaking' : 'active') : ''}`}
+          onClick={isActive ? stopAgent : startAgent}
+        >
+          {status}
+        </button>
       </div>
 
-      <div className="agent-main">
-        <div className={`agent-avatar ${isActive ? 'active' : ''} ${isSpeaking ? 'speaking' : ''} ${isListening ? 'listening' : ''}`}>
-          <div className="avatar-circle">
-            <span className="avatar-icon">🧞</span>
+      {/* 실시간 대화 안내 */}
+      <div className="agent-guide">
+        <span>── 실시간 대화 ──</span>
+        <p className="guide-main">"지니야"라고 불러보세요</p>
+        <p className="guide-sub">또는 아래 버튼을 눌러 대화를 시작하세요</p>
+      </div>
+
+      {/* 대화창 */}
+      <div className="chat-container">
+        {messages.length === 0 ? (
+          <div className="chat-empty">
+            <span className="chat-empty-icon">💬</span>
+            <p>대화가 여기에 표시됩니다</p>
           </div>
-          {isActive && (
-            <>
-              <div className="pulse-ring"></div>
-              <div className="pulse-ring delay-1"></div>
-              <div className="pulse-ring delay-2"></div>
-            </>
-          )}
+        ) : (
+          messages.map((msg, idx) => (
+            <div key={idx} className={`chat-message ${msg.isUser ? 'user' : 'assistant'}`}>
+              {!msg.isUser && <div className="message-avatar">🤖</div>}
+              <div className="message-bubble">
+                <p>{msg.text}</p>
+                <span className="message-time">{msg.time}</span>
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* 입력 영역 */}
+      <div className="input-section">
+        {/* 기능 버튼들 */}
+        <div className="action-buttons">
+          <button className="action-btn">
+            <span>📷</span>
+            <span>촬영</span>
+          </button>
+          <button className="action-btn">
+            <span>📎</span>
+            <span>파일</span>
+          </button>
+          <button className="action-btn">
+            <span>🎤</span>
+            <span>마이크</span>
+          </button>
+          <button className={`action-btn voice-btn ${isActive ? 'active' : ''}`} onClick={isActive ? stopAgent : startAgent}>
+            <span>🎙️</span>
+            <span>보이스</span>
+          </button>
+          <button className="action-btn record-btn">
+            <span>🔴</span>
+            <span>녹음</span>
+          </button>
         </div>
 
-        <div className="agent-status">{status}</div>
-
-        <div className="agent-controls">
-          {!isActive ? (
-            <button className="start-btn" onClick={startAgent}>
-              <span className="btn-icon">🎤</span>
-              <span>에이전트 시작</span>
-            </button>
-          ) : (
-            <button className="stop-btn" onClick={stopAgent}>
-              <span className="btn-icon">⏹️</span>
-              <span>종료</span>
-            </button>
-          )}
+        {/* 텍스트 입력 */}
+        <div className="text-input-wrapper">
+          <input
+            type="text"
+            placeholder="무엇을 도와드릴까요?"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
+          />
+          <button className="send-btn" onClick={handleTextSubmit}>
+            <span>▶</span>
+          </button>
         </div>
       </div>
 
-      <div className="agent-logs">
-        <div className="logs-header">
-          <span>📋 대화 로그</span>
-          <button className="logs-clear" onClick={() => setLogs([])}>지우기</button>
+      {/* 타임라인 */}
+      <div className="timeline-section">
+        <div className="timeline-header">
+          <span>📋 지니 활동 타임라인</span>
         </div>
-        <div className="logs-content">
-          {logs.length === 0 ? (
-            <div className="logs-empty">대화가 여기에 표시됩니다</div>
+        <div className="timeline-content" ref={timelineRef}>
+          {timeline.length === 0 ? (
+            <div className="timeline-empty">활동 기록이 여기에 표시됩니다</div>
           ) : (
-            logs.map((log, i) => (
-              <div key={i} className={`log-item ${log.type}`}>
-                <span className="log-time">{log.timestamp}</span>
-                <span className="log-message">{log.message}</span>
+            timeline.map((item) => (
+              <div key={item.id} className={`timeline-item ${item.status}`}>
+                <span className="timeline-icon">{item.icon}</span>
+                <span className="timeline-text">{item.text}</span>
+                <span className="timeline-status">
+                  {item.status === 'done' && '✓'}
+                  {item.status === 'loading' && <span className="loading-dot">●</span>}
+                  {item.status === 'error' && '✗'}
+                </span>
               </div>
             ))
           )}
