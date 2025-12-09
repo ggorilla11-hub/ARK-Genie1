@@ -329,7 +329,7 @@ function AgentPage({ user }) {
 
   return (
     <div className="agent-page">
-      {/* 헤더 */}
+      {/* 1. 헤더 */}
       <div className="agent-header">
         <div className="header-avatar">
           <span className="header-avatar-fallback">🤖</span>
@@ -346,14 +346,14 @@ function AgentPage({ user }) {
         </button>
       </div>
 
-      {/* 실시간 대화 안내 */}
+      {/* 2. 실시간 대화 안내 */}
       <div className="agent-guide">
         <span>── 실시간 대화 ──</span>
         <p className="guide-main">"지니야"라고 불러보세요</p>
         <p className="guide-sub">또는 아래 버튼을 눌러 대화를 시작하세요</p>
       </div>
 
-      {/* 대화창 */}
+      {/* 3. 대화창 - 버튼 위에 위치! */}
       <div className="chat-container">
         {messages.length === 0 ? (
           <div className="chat-empty">
@@ -374,7 +374,7 @@ function AgentPage({ user }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 입력 영역 */}
+      {/* 4. 입력 영역 */}
       <div className="input-section">
         <div className="action-buttons">
           <button className="action-btn">
@@ -413,7 +413,7 @@ function AgentPage({ user }) {
         </div>
       </div>
 
-      {/* 타임라인 */}
+      {/* 5. 타임라인 - 맨 아래 */}
       <div className="timeline-section">
         <div className="timeline-header">
           <span>📋 지니 활동 타임라인</span>
