@@ -12,6 +12,7 @@ function AgentPage() {
   const [currentCall, setCurrentCall] = useState(null);
   const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
+  const voiceModeRef = useRef(false);
 
   // 음성 합성 (지니 목소리)
   const speak = (text, callback) => {
@@ -32,13 +33,6 @@ function AgentPage() {
     }
   }, [messages]);
 
-  // 보이스 모드 종료 시 recognition 정리
-  useEffect(() => {
-    if (!isVoiceMode && recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-  }, [isVoiceMode]);
-
   const addMessage = (text, isUser, cardData = null) => {
     const newMsg = {
       id: Date.now(),
@@ -53,7 +47,7 @@ function AgentPage() {
   // 지니야 호출 감지 (유사 발음 포함)
   const isGenieCall = (text) => {
     const lower = text.toLowerCase().replace(/\s/g, '');
-    const patterns = ['지니야', '지니아', '지니', '진희야', '진희아', '진이야', '진이아', '지은아', '지은이', '지니님', '지은아'];
+    const patterns = ['지니야', '지니아', '지니', '진희야', '진희아', '진이야', '진이아', '지은아', '지은이', '지니님', '진짜', '진이'];
     return patterns.some(p => lower.includes(p));
   };
 
@@ -112,53 +106,53 @@ function AgentPage() {
     }
   };
 
-  // 보이스 모드 시작 (연속 대화)
-  const startVoiceMode = () => {
+  // 단일 음성 인식 (모바일 호환)
+  const startSingleRecognition = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
       return;
     }
 
-    setIsVoiceMode(true);
-    setStatus('듣는중...');
-    speak('네, 대표님! 무엇을 도와드릴까요?', () => {
-      startContinuousListening();
-    });
-    addMessage('🎙️ 보이스 모드가 시작되었습니다. "지니야"라고 불러주세요.', false);
-  };
-
-  // 연속 음성 인식
-  const startContinuousListening = () => {
-    if (!isVoiceMode) return;
-
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'ko-KR';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setStatus('듣는중...');
+    };
 
     recognition.onresult = (event) => {
-      const lastResult = event.results[event.results.length - 1];
-      if (lastResult.isFinal) {
-        const transcript = lastResult[0].transcript.trim();
-        if (transcript) {
-          processVoiceCommand(transcript);
-        }
+      const transcript = event.results[0][0].transcript.trim();
+      if (transcript) {
+        processVoiceCommand(transcript);
+      }
+      // 보이스 모드면 다시 시작
+      if (voiceModeRef.current) {
+        setTimeout(() => startSingleRecognition(), 500);
       }
     };
 
     recognition.onerror = (event) => {
       console.log('음성 인식 에러:', event.error);
-      if (event.error === 'no-speech' && isVoiceMode) {
-        // 음성 없으면 다시 시작
-        setTimeout(() => startContinuousListening(), 100);
+      // 보이스 모드면 다시 시작
+      if (voiceModeRef.current && event.error !== 'aborted') {
+        setTimeout(() => startSingleRecognition(), 500);
       }
     };
 
     recognition.onend = () => {
-      // 보이스 모드 중이면 다시 시작
-      if (isVoiceMode) {
-        setTimeout(() => startContinuousListening(), 100);
+      if (!voiceModeRef.current) {
+        setStatus('대기중');
+      } else {
+        // 보이스 모드면 다시 시작
+        setTimeout(() => {
+          if (voiceModeRef.current) {
+            startSingleRecognition();
+          }
+        }, 300);
       }
     };
 
@@ -166,12 +160,25 @@ function AgentPage() {
     recognition.start();
   };
 
+  // 보이스 모드 시작
+  const startVoiceMode = () => {
+    voiceModeRef.current = true;
+    setIsVoiceMode(true);
+    setStatus('듣는중...');
+    
+    addMessage('🎙️ 보이스 모드 시작! "지니야"라고 불러주세요.', false);
+    speak('네, 대표님! 무엇을 도와드릴까요?', () => {
+      startSingleRecognition();
+    });
+  };
+
   // 보이스 모드 종료
   const stopVoiceMode = () => {
+    voiceModeRef.current = false;
     setIsVoiceMode(false);
     setStatus('대기중');
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      recognitionRef.current.abort();
     }
     addMessage('🔇 보이스 모드가 종료되었습니다.', false);
     speak('보이스 모드를 종료합니다.');
@@ -183,22 +190,18 @@ function AgentPage() {
 
     // "지니야" 호출 감지
     if (isGenieCall(command)) {
-      // 단순 호출인지 명령 포함인지 확인
-      const cleanCommand = command.replace(/지니야?|진희야?|진이야?|지은아?/gi, '').trim();
+      const cleanCommand = command.replace(/지니야?|진희야?|진이야?|지은아?|지니?/gi, '').trim();
       
       if (cleanCommand.length < 3) {
-        // 단순 호출
         speak('네, 대표님! 무엇을 도와드릴까요?');
         addMessage('네, 대표님! 무엇을 도와드릴까요? 🧞', false);
         return;
       } else {
-        // 명령 포함
         processActualCommand(cleanCommand);
         return;
       }
     }
 
-    // 일반 명령 처리
     processActualCommand(command);
   };
 
@@ -206,7 +209,6 @@ function AgentPage() {
   const processActualCommand = (command) => {
     const lowerCommand = command.toLowerCase();
 
-    // 전화 명령
     const phoneMatch = command.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
     const nameMatch = command.match(/([가-힣]{2,4})(?:에게|한테|님|씨|고객)?/);
 
@@ -223,7 +225,7 @@ function AgentPage() {
         speak('전화번호를 말씀해주시거나 입력창에 입력해주세요, 대표님.');
         addMessage('📱 전화번호를 말씀해주시거나 입력창에 입력해주세요.', false);
       }
-    } else if (lowerCommand.includes('종료') || lowerCommand.includes('끊어')) {
+    } else if (lowerCommand.includes('종료') || lowerCommand.includes('끊어') || lowerCommand.includes('그만')) {
       if (currentCall) {
         endCall();
       } else if (isVoiceMode) {
@@ -251,7 +253,7 @@ function AgentPage() {
     setInputText('');
   };
 
-  // 파일 업로드 (준비중)
+  // 파일 업로드
   const handleFileUpload = () => {
     speak('파일 업로드 기능은 준비중입니다, 대표님.');
     addMessage('📁 파일 업로드 기능 준비중...', false);
@@ -259,7 +261,6 @@ function AgentPage() {
 
   return (
     <div className="agent-page">
-      {/* 헤더 */}
       <header className="agent-header">
         <div className="header-left">
           <div className="header-icon">🧞</div>
@@ -273,7 +274,6 @@ function AgentPage() {
         </div>
       </header>
 
-      {/* 통화중 배너 */}
       {currentCall && (
         <div className="call-banner">
           <div className="call-info">
@@ -284,18 +284,16 @@ function AgentPage() {
         </div>
       )}
 
-      {/* 보이스 모드 배너 */}
       {isVoiceMode && !currentCall && (
         <div className="voice-banner">
           <div className="voice-info">
             <span className="voice-icon">🎙️</span>
-            <span>보이스 모드 - "지니야"라고 불러주세요</span>
+            <span>보이스 모드 - "지니야"</span>
           </div>
           <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
         </div>
       )}
 
-      {/* 채팅 영역 */}
       <div className="chat-area" ref={chatAreaRef}>
         {messages.length === 0 ? (
           <div className="welcome-message">
@@ -306,7 +304,7 @@ function AgentPage() {
               <p>💡 이렇게 말해보세요:</p>
               <span>"지니야"</span>
               <span>"홍길동 010-1234-5678 전화해줘"</span>
-              <span>"통화 종료해줘"</span>
+              <span>"종료"</span>
             </div>
           </div>
         ) : (
@@ -350,7 +348,6 @@ function AgentPage() {
         )}
       </div>
 
-      {/* 빠른 액션 */}
       <div className="quick-actions">
         <button onClick={() => { 
           speak('네, 대표님! 무엇을 도와드릴까요?'); 
@@ -362,7 +359,6 @@ function AgentPage() {
         <button disabled={!currentCall} onClick={endCall}>📴 종료</button>
       </div>
 
-      {/* 입력 영역 */}
       <div className="input-area">
         <button className="icon-btn" onClick={handleFileUpload}>📎</button>
         <button 
