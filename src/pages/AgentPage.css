@@ -360,3 +360,44 @@
     max-width: 350px;
   }
 }
+/* 보이스 모드 배너 */
+.voice-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: #000;
+}
+
+.voice-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.voice-icon {
+  animation: pulse 1s infinite;
+}
+
+.stop-voice-btn {
+  padding: 6px 16px;
+  background: rgba(0,0,0,0.2);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-badge.voice-mode {
+  background: #4ade80;
+  color: #000;
+  animation: pulse 1s infinite;
+}
+
+.voice-btn.active {
+  background: #ef4444;
+  animation: pulse 1s infinite;
+}
