@@ -6,13 +6,21 @@ const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
 function AgentPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('대기중');
+  const [currentCall, setCurrentCall] = useState(null);
   const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
+
+  // 음성 합성 (지니 목소리)
+  const speak = (text) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ko-KR';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.1;
+    window.speechSynthesis.speak(utterance);
+  };
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -35,7 +43,8 @@ function AgentPage() {
   const makeCall = async (name, phone) => {
     setIsProcessing(true);
     setStatus('전화 연결중...');
-    addMessage(`${name}님께 전화를 연결합니다...`, false);
+    addMessage(`${name}님께 전화를 연결합니다...`, false, { type: 'calling', name, phone });
+    speak(`${name}님께 전화를 연결합니다.`);
 
     try {
       const formattedPhone = phone.replace(/-/g, '');
@@ -43,37 +52,55 @@ function AgentPage() {
         ? '+82' + formattedPhone.slice(1) 
         : formattedPhone;
 
-      const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`);
+      const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`, {
+        method: 'GET',
+        mode: 'cors'
+      });
       const data = await response.json();
 
       if (data.success) {
-        addMessage(`✅ ${name}님께 전화 연결 성공!`, false, {
-          type: 'call',
+        setCurrentCall({ name, phone, callSid: data.callSid });
+        addMessage(`✅ ${name}님과 통화중입니다.`, false, {
+          type: 'call-connected',
           name,
           phone,
-          status: '연결됨',
           callSid: data.callSid
         });
         setStatus('통화중');
+        speak(`${name}님과 연결되었습니다.`);
       } else {
         addMessage(`❌ 전화 연결 실패: ${data.error}`, false);
         setStatus('대기중');
       }
     } catch (error) {
-      addMessage(`❌ 전화 연결 실패: ${error.message}`, false);
+      addMessage(`⏳ 서버 연결중... 잠시 후 다시 시도해주세요.`, false);
       setStatus('대기중');
     }
     setIsProcessing(false);
   };
 
+  // 전화 종료
+  const endCall = () => {
+    if (currentCall) {
+      addMessage(`📞 ${currentCall.name}님과의 통화가 종료되었습니다.`, false, {
+        type: 'call-ended',
+        name: currentCall.name
+      });
+      speak(`${currentCall.name}님과의 통화가 종료되었습니다.`);
+      setCurrentCall(null);
+      setStatus('대기중');
+    }
+  };
+
   // 음성 인식 시작
   const startListening = () => {
-    if (!('webkitSpeechRecognition' in window)) {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
       return;
     }
 
-    const recognition = new window.webkitSpeechRecognition();
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
     recognition.lang = 'ko-KR';
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -95,7 +122,7 @@ function AgentPage() {
 
     recognition.onend = () => {
       setIsListening(false);
-      setStatus('대기중');
+      if (status === '듣는중...') setStatus('대기중');
     };
 
     recognitionRef.current = recognition;
@@ -105,22 +132,45 @@ function AgentPage() {
   // 음성 명령 처리
   const processVoiceCommand = (command) => {
     addMessage(command, true);
+    const lowerCommand = command.toLowerCase();
 
-    if (!customerName || !customerPhone) {
-      addMessage('먼저 고객 정보(이름, 연락처)를 입력해주세요.', false);
+    // "지니야" 호출 감지
+    if (lowerCommand.includes('지니') || lowerCommand.includes('지니야')) {
+      speak('네, 대표님! 무엇을 도와드릴까요?');
+      addMessage('네, 대표님! 무엇을 도와드릴까요?', false);
       return;
     }
 
-    if (command.includes('전화') || command.includes('콜') || command.includes('연결')) {
-      makeCall(customerName, customerPhone);
-    } else if (command.includes('예약') || command.includes('일정') || command.includes('약속')) {
-      addMessage(`📅 ${customerName}님 일정 등록 기능 준비중...`, false);
-    } else if (command.includes('기록') || command.includes('시트') || command.includes('저장')) {
-      addMessage(`📊 ${customerName}님 정보 기록 기능 준비중...`, false);
-    } else if (command.includes('문자') || command.includes('카톡') || command.includes('메시지')) {
-      addMessage(`💬 ${customerName}님께 메시지 발송 기능 준비중...`, false);
+    // 전화 명령 파싱
+    const phoneMatch = command.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
+    const nameMatch = command.match(/([가-힣]{2,4})(?:에게|한테|님|씨|고객)?/);
+
+    if (lowerCommand.includes('전화') || lowerCommand.includes('콜') || lowerCommand.includes('연결')) {
+      if (phoneMatch) {
+        const name = nameMatch ? nameMatch[1] : '고객';
+        makeCall(name, phoneMatch[0]);
+      } else if (inputText.match(/\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4}/)) {
+        const phone = inputText.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/)[0];
+        const name = nameMatch ? nameMatch[1] : '고객';
+        makeCall(name, phone);
+      } else {
+        speak('전화번호를 말씀해주시거나 입력창에 입력해주세요.');
+        addMessage('📱 전화번호를 말씀해주시거나 입력창에 입력해주세요.', false);
+      }
+    } else if (lowerCommand.includes('종료') || lowerCommand.includes('끊어')) {
+      endCall();
+    } else if (lowerCommand.includes('카톡') || lowerCommand.includes('문자') || lowerCommand.includes('메시지')) {
+      speak('카카오톡 발송 기능은 준비중입니다.');
+      addMessage('💬 카카오톡/문자 발송 기능 준비중...', false, { type: 'pending', feature: '카톡/문자' });
+    } else if (lowerCommand.includes('일정') || lowerCommand.includes('예약') || lowerCommand.includes('약속')) {
+      speak('일정 등록 기능은 준비중입니다.');
+      addMessage('📅 일정 등록 기능 준비중...', false, { type: 'pending', feature: '캘린더' });
+    } else if (lowerCommand.includes('기록') || lowerCommand.includes('저장') || lowerCommand.includes('시트')) {
+      speak('고객현황판 기록 기능은 준비중입니다.');
+      addMessage('📊 고객현황판 기록 기능 준비중...', false, { type: 'pending', feature: '시트' });
     } else {
-      addMessage(`네, 교수님. "${command}" 명령을 처리하겠습니다.`, false);
+      speak(`네, 대표님. 말씀하신 내용을 처리하겠습니다.`);
+      addMessage(`🧞 "${command}" 명령을 처리중입니다...`, false);
     }
   };
 
@@ -131,42 +181,38 @@ function AgentPage() {
     setInputText('');
   };
 
+  // 파일 업로드 (준비중)
+  const handleFileUpload = () => {
+    speak('파일 업로드 기능은 준비중입니다.');
+    addMessage('📁 파일 업로드 기능 준비중...', false);
+  };
+
   return (
     <div className="agent-page">
+      {/* 헤더 */}
       <header className="agent-header">
-        <div className="header-icon">🧞</div>
-        <div className="header-info">
-          <h1>AI 지니</h1>
-          <p>실제 작동 • 전화/시트/캘린더</p>
+        <div className="header-left">
+          <div className="header-icon">🧞</div>
+          <div className="header-info">
+            <h1>AI 지니</h1>
+            <span className="header-subtitle">음성 비서</span>
+          </div>
         </div>
-        <div className={`status-badge ${isListening ? 'listening' : isProcessing ? 'processing' : ''}`}>
+        <div className={`status-badge ${isListening ? 'listening' : isProcessing ? 'processing' : currentCall ? 'oncall' : ''}`}>
           {status}
         </div>
       </header>
 
-      {/* 고객 정보 입력 */}
-      <div className="customer-input-section">
-        <h3>📋 고객 정보</h3>
-        <div className="customer-inputs">
-          <input
-            type="text"
-            placeholder="고객 이름"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-          />
-          <input
-            type="tel"
-            placeholder="연락처 (010-1234-5678)"
-            value={customerPhone}
-            onChange={(e) => setCustomerPhone(e.target.value)}
-          />
-        </div>
-        {customerName && customerPhone && (
-          <div className="customer-ready">
-            ✅ {customerName}님 ({customerPhone}) 준비됨
+      {/* 통화중 배너 */}
+      {currentCall && (
+        <div className="call-banner">
+          <div className="call-info">
+            <span className="call-icon">📞</span>
+            <span>{currentCall.name}님과 통화중</span>
           </div>
-        )}
-      </div>
+          <button className="end-call-btn" onClick={endCall}>통화 종료</button>
+        </div>
+      )}
 
       {/* 채팅 영역 */}
       <div className="chat-area" ref={chatAreaRef}>
@@ -174,12 +220,12 @@ function AgentPage() {
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>고객 정보를 입력하고 음성으로 명령해주세요.</p>
+            <p>음성 또는 텍스트로 명령해주세요.</p>
             <div className="example-commands">
               <p>💡 이렇게 말해보세요:</p>
-              <span>"전화 연결해줘"</span>
-              <span>"일정 잡아줘"</span>
-              <span>"시트에 기록해줘"</span>
+              <span>"지니야"</span>
+              <span>"홍길동 010-1234-5678 전화해줘"</span>
+              <span>"통화 종료해줘"</span>
             </div>
           </div>
         ) : (
@@ -189,11 +235,29 @@ function AgentPage() {
                 <p>{msg.text}</p>
                 {msg.cardData && (
                   <div className={`action-card ${msg.cardData.type}`}>
-                    {msg.cardData.type === 'call' && (
+                    {msg.cardData.type === 'calling' && (
                       <>
                         <span className="card-icon">📞</span>
-                        <span>{msg.cardData.name}님 통화</span>
-                        <span className="card-status">{msg.cardData.status}</span>
+                        <span>연결중: {msg.cardData.name}님</span>
+                        <div className="card-loading"></div>
+                      </>
+                    )}
+                    {msg.cardData.type === 'call-connected' && (
+                      <>
+                        <span className="card-icon">✅</span>
+                        <span>통화중: {msg.cardData.name}님</span>
+                      </>
+                    )}
+                    {msg.cardData.type === 'call-ended' && (
+                      <>
+                        <span className="card-icon">📴</span>
+                        <span>통화종료: {msg.cardData.name}님</span>
+                      </>
+                    )}
+                    {msg.cardData.type === 'pending' && (
+                      <>
+                        <span className="card-icon">🔧</span>
+                        <span>{msg.cardData.feature} 준비중</span>
                       </>
                     )}
                   </div>
@@ -205,34 +269,34 @@ function AgentPage() {
         )}
       </div>
 
-      {/* 빠른 액션 버튼 */}
+      {/* 빠른 액션 */}
       <div className="quick-actions">
-        <button onClick={() => customerName && customerPhone && makeCall(customerName, customerPhone)} 
-                disabled={!customerName || !customerPhone || isProcessing}>
-          📞 전화
+        <button onClick={() => { speak('네, 대표님!'); addMessage('네, 대표님! 무엇을 도와드릴까요?', false); }}>
+          🧞 지니야
         </button>
-        <button disabled>📊 기록</button>
-        <button disabled>📅 일정</button>
+        <button onClick={handleFileUpload}>📁 파일</button>
+        <button disabled={!currentCall} onClick={endCall}>📴 종료</button>
       </div>
 
       {/* 입력 영역 */}
       <div className="input-area">
+        <button className="icon-btn" onClick={handleFileUpload}>📎</button>
         <button 
           className={`voice-btn ${isListening ? 'listening' : ''}`}
           onClick={startListening}
           disabled={isProcessing}
         >
-          🎤
+          🎙️
         </button>
         <input
           type="text"
-          placeholder="지니야, 전화 연결해줘..."
+          placeholder="번호 입력 또는 명령어..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
         />
         <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
-          ▶
+          ➤
         </button>
       </div>
     </div>
