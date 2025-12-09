@@ -3,7 +3,7 @@ import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './
 import HomePage from './pages/HomePage';
 import CustomerPage from './pages/CustomerPage';
 import MagicBoxPage from './pages/MagicBoxPage';
-import AIGeniePage from './pages/AIGeniePage';
+import AgentPage from './pages/AgentPage';
 import MyPage from './pages/MyPage';
 import './App.css';
 
@@ -71,7 +71,7 @@ function App() {
       case 'magic':
         return <MagicBoxPage user={user} />;
       case 'agent':
-        return <AIGeniePage user={user} />;
+        return <AgentPage user={user} />;
       case 'my':
         return <MyPage user={user} onLogout={handleLogout} />;
       default:
