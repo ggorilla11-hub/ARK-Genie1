@@ -15,24 +15,19 @@
     
     <title>ARK 지니 - AI 보험 비서</title>
     
-    <!-- 카카오톡 인앱브라우저 감지 및 외부 브라우저로 이동 -->
     <script>
       (function() {
         var userAgent = navigator.userAgent.toLowerCase();
         var targetUrl = window.location.href;
         
-        // 카카오톡 인앱브라우저 감지
         if (userAgent.indexOf('kakaotalk') > -1) {
-          // Android: Chrome으로 이동
           if (userAgent.indexOf('android') > -1) {
             window.location.href = 'intent://' + targetUrl.replace(/https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
           }
-          // iOS: Safari로 이동
           else if (userAgent.indexOf('iphone') > -1 || userAgent.indexOf('ipad') > -1) {
             window.location.href = 'x-safari-' + targetUrl;
           }
         }
-        // 네이버, 라인 등 다른 인앱브라우저도 처리
         else if (userAgent.indexOf('naver') > -1 || userAgent.indexOf('line') > -1 || 
                  userAgent.indexOf('inapp') > -1 || userAgent.indexOf('fb_iab') > -1) {
           if (userAgent.indexOf('android') > -1) {
@@ -70,16 +65,3 @@
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-```
-
-5. 페이지 맨 아래 **초록색 "Commit changes" 버튼** 클릭
-
-6. **1-2분 기다리면** Vercel이 자동 배포합니다
-
----
-
-### 2단계: 카카오톡에서 테스트
-
-배포 완료 후, 카카오톡에서 이 링크를 클릭해보세요:
-```
-https://ark-genie1-j27p.vercel.app
