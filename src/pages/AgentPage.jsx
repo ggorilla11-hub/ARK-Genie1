@@ -11,7 +11,7 @@ function AgentPage() {
   const [currentCall, setCurrentCall] = useState(null);
   const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
-  const isListeningRef = useRef(false);
+  const voiceModeRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -28,7 +28,7 @@ function AgentPage() {
     }]);
   };
 
-  // 지니 음성 응답 (브라우저 TTS)
+  // 지니 음성 응답
   const speakGenie = (text) => {
     return new Promise((resolve) => {
       window.speechSynthesis.cancel();
@@ -38,7 +38,6 @@ function AgentPage() {
       utterance.pitch = 1.2;
       utterance.volume = 1.0;
       
-      // 한국어 음성 찾기
       const voices = window.speechSynthesis.getVoices();
       const koreanVoice = voices.find(v => v.lang.includes('ko'));
       if (koreanVoice) utterance.voice = koreanVoice;
@@ -50,7 +49,7 @@ function AgentPage() {
     });
   };
 
-  // GPT-4o에게 질문하고 답변 받기
+  // GPT-4o 대화
   const askGenie = async (userMessage) => {
     try {
       const response = await fetch(`${RENDER_SERVER}/chat`, {
@@ -59,15 +58,15 @@ function AgentPage() {
         body: JSON.stringify({ message: userMessage })
       });
       const data = await response.json();
-      return data.reply || '죄송합니다, 잠시 후 다시 말씀해주세요.';
+      return data.reply || '죄송합니다, 다시 말씀해주세요.';
     } catch (error) {
       console.error('GPT 에러:', error);
-      return '네, 대표님! 서버 연결이 불안정합니다. 잠시 후 다시 시도해주세요.';
+      return '네, 대표님! 잠시 연결이 불안정합니다.';
     }
   };
 
-  // 음성 인식 시작 (브라우저 Web Speech API)
-  const startVoiceMode = () => {
+  // 음성 인식 시작 (계속 켜져있음)
+  const startRecognition = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('음성 인식을 지원하지 않는 브라우저입니다.');
       return;
@@ -77,59 +76,58 @@ function AgentPage() {
     const recognition = new SpeechRecognition();
     
     recognition.lang = 'ko-KR';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = false;
 
-    recognition.onstart = () => {
-      isListeningRef.current = true;
-      setIsVoiceMode(true);
-      setStatus('듣는중...');
-      addMessage('🎙️ 보이스 모드 시작 - "지니야"라고 불러주세요.', false);
-    };
-
     recognition.onresult = async (event) => {
-      const lastIndex = event.results.length - 1;
-      const transcript = event.results[lastIndex][0].transcript.trim();
+      const transcript = event.results[0][0].transcript.trim();
       
       if (transcript) {
         console.log('인식됨:', transcript);
         addMessage(`🗣️ ${transcript}`, true);
         
-        // GPT-4o에게 질문
         setStatus('생각중...');
         const reply = await askGenie(transcript);
         
         addMessage(`🧞 ${reply}`, false);
-        setStatus('듣는중...');
-        
-        // 음성으로 응답
         await speakGenie(reply);
+        
+        // 음성 응답 후 다시 듣기 시작
+        if (voiceModeRef.current) {
+          setStatus('듣는중...');
+          setTimeout(() => {
+            if (voiceModeRef.current) {
+              startRecognition();
+            }
+          }, 300);
+        }
       }
     };
 
     recognition.onerror = (event) => {
       console.log('음성 인식 에러:', event.error);
-      if (event.error === 'no-speech') {
-        // 음성 없으면 계속 듣기
-      } else if (event.error === 'aborted') {
-        // 중단됨
-      } else {
-        addMessage('❌ 음성 인식 에러. 다시 시도해주세요.', false);
+      // 에러 나도 보이스 모드면 다시 시작
+      if (voiceModeRef.current && event.error !== 'aborted') {
+        setTimeout(() => {
+          if (voiceModeRef.current) {
+            startRecognition();
+          }
+        }, 500);
       }
     };
 
     recognition.onend = () => {
       console.log('음성 인식 종료');
       // 보이스 모드면 다시 시작
-      if (isListeningRef.current && isVoiceMode) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.log('재시작 실패:', e);
-        }
+      if (voiceModeRef.current) {
+        setTimeout(() => {
+          if (voiceModeRef.current) {
+            setStatus('듣는중...');
+            startRecognition();
+          }
+        }, 300);
       } else {
         setStatus('대기중');
-        setIsVoiceMode(false);
       }
     };
 
@@ -137,13 +135,24 @@ function AgentPage() {
     recognition.start();
   };
 
+  // 보이스 모드 시작
+  const startVoiceMode = async () => {
+    voiceModeRef.current = true;
+    setIsVoiceMode(true);
+    setStatus('듣는중...');
+    addMessage('🎙️ 보이스 모드 시작 - 말씀하세요!', false);
+    
+    startRecognition();
+  };
+
   // 보이스 모드 종료
   const stopVoiceMode = () => {
-    isListeningRef.current = false;
+    voiceModeRef.current = false;
     setIsVoiceMode(false);
     setStatus('대기중');
+    
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      recognitionRef.current.abort();
     }
     window.speechSynthesis.cancel();
     addMessage('🔇 보이스 모드 종료', false);
@@ -171,7 +180,7 @@ function AgentPage() {
         setStatus('대기중');
       }
     } catch (error) {
-      addMessage('⏳ 서버 준비중... 잠시 후 다시 시도해주세요.', false);
+      addMessage('⏳ 서버 준비중...', false);
       setStatus('대기중');
     }
   };
