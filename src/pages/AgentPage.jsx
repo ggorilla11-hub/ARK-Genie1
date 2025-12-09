@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
 
 const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
-const WS_SERVER = 'wss://ark-genie-server.onrender.com';
 
 function AgentPage() {
   const [messages, setMessages] = useState([]);
@@ -11,11 +10,8 @@ function AgentPage() {
   const [status, setStatus] = useState('대기중');
   const [currentCall, setCurrentCall] = useState(null);
   const chatAreaRef = useRef(null);
-  const wsRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const mediaStreamRef = useRef(null);
-  const audioQueueRef = useRef([]);
-  const isPlayingRef = useRef(false);
+  const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -32,149 +28,124 @@ function AgentPage() {
     }]);
   };
 
-  // 보이스 모드 시작
-  const startVoiceMode = async () => {
+  // 지니 음성 응답 (브라우저 TTS)
+  const speakGenie = (text) => {
+    return new Promise((resolve) => {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ko-KR';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.2;
+      utterance.volume = 1.0;
+      
+      // 한국어 음성 찾기
+      const voices = window.speechSynthesis.getVoices();
+      const koreanVoice = voices.find(v => v.lang.includes('ko'));
+      if (koreanVoice) utterance.voice = koreanVoice;
+      
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      
+      window.speechSynthesis.speak(utterance);
+    });
+  };
+
+  // GPT-4o에게 질문하고 답변 받기
+  const askGenie = async (userMessage) => {
     try {
-      setStatus('연결중...');
-      addMessage('🎙️ 음성 연결중...', false);
+      const response = await fetch(`${RENDER_SERVER}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage })
+      });
+      const data = await response.json();
+      return data.reply || '죄송합니다, 잠시 후 다시 말씀해주세요.';
+    } catch (error) {
+      console.error('GPT 에러:', error);
+      return '네, 대표님! 서버 연결이 불안정합니다. 잠시 후 다시 시도해주세요.';
+    }
+  };
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
+  // 음성 인식 시작 (브라우저 Web Speech API)
+  const startVoiceMode = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('음성 인식을 지원하지 않는 브라우저입니다.');
+      return;
+    }
 
-      const ws = new WebSocket(WS_SERVER);
-      wsRef.current = ws;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.lang = 'ko-KR';
+    recognition.continuous = true;
+    recognition.interimResults = false;
 
-      ws.onopen = () => {
-        console.log('WebSocket 연결됨');
-        setStatus('듣는중...');
-        setIsVoiceMode(true);
-        addMessage('🎙️ 연결됨! "지니야"라고 불러주세요.', false);
+    recognition.onstart = () => {
+      isListeningRef.current = true;
+      setIsVoiceMode(true);
+      setStatus('듣는중...');
+      addMessage('🎙️ 보이스 모드 시작 - "지니야"라고 불러주세요.', false);
+    };
+
+    recognition.onresult = async (event) => {
+      const lastIndex = event.results.length - 1;
+      const transcript = event.results[lastIndex][0].transcript.trim();
+      
+      if (transcript) {
+        console.log('인식됨:', transcript);
+        addMessage(`🗣️ ${transcript}`, true);
         
-        ws.send(JSON.stringify({ type: 'start' }));
-        startAudioProcessing(stream, ws);
-      };
+        // GPT-4o에게 질문
+        setStatus('생각중...');
+        const reply = await askGenie(transcript);
+        
+        addMessage(`🧞 ${reply}`, false);
+        setStatus('듣는중...');
+        
+        // 음성으로 응답
+        await speakGenie(reply);
+      }
+    };
 
-      ws.onmessage = (event) => {
+    recognition.onerror = (event) => {
+      console.log('음성 인식 에러:', event.error);
+      if (event.error === 'no-speech') {
+        // 음성 없으면 계속 듣기
+      } else if (event.error === 'aborted') {
+        // 중단됨
+      } else {
+        addMessage('❌ 음성 인식 에러. 다시 시도해주세요.', false);
+      }
+    };
+
+    recognition.onend = () => {
+      console.log('음성 인식 종료');
+      // 보이스 모드면 다시 시작
+      if (isListeningRef.current && isVoiceMode) {
         try {
-          const msg = JSON.parse(event.data);
-          
-          // 사용자 음성 인식 결과 표시
-          if (msg.type === 'transcript') {
-            if (msg.role === 'user') {
-              addMessage(`🗣️ ${msg.text}`, true);
-            } else {
-              addMessage(`🧞 ${msg.text}`, false);
-            }
-          }
-
-          // 오디오 큐에 추가 (겹침 방지)
-          if (msg.type === 'audio' && msg.data) {
-            audioQueueRef.current.push(msg.data);
-            playNextAudio();
-          }
+          recognition.start();
         } catch (e) {
-          console.error('메시지 파싱 에러:', e);
+          console.log('재시작 실패:', e);
         }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket 에러:', error);
-        setStatus('연결 실패');
-        addMessage('❌ 서버 연결 실패. 다시 시도해주세요.', false);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket 종료');
-        setIsVoiceMode(false);
+      } else {
         setStatus('대기중');
-      };
-
-    } catch (error) {
-      console.error('마이크 에러:', error);
-      setStatus('대기중');
-      addMessage('❌ 마이크 권한이 필요합니다.', false);
-    }
-  };
-
-  // 오디오 처리
-  const startAudioProcessing = (stream, ws) => {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = audioContext;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-      processor.onaudioprocess = (e) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          const inputData = e.inputBuffer.getChannelData(0);
-          const pcm16 = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
-          }
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-          ws.send(JSON.stringify({ type: 'audio', data: base64 }));
-        }
-      };
-
-      source.connect(processor);
-      processor.connect(audioContext.destination);
-    } catch (e) {
-      console.error('오디오 처리 에러:', e);
-    }
-  };
-
-  // 오디오 순차 재생 (겹침 방지)
-  const playNextAudio = async () => {
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
-    
-    isPlayingRef.current = true;
-    const base64Data = audioQueueRef.current.shift();
-    
-    try {
-      const audioContext = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      if (!audioContextRef.current) audioContextRef.current = audioContext;
-      
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+        setIsVoiceMode(false);
       }
-      const pcm16 = new Int16Array(bytes.buffer);
-      const float32 = new Float32Array(pcm16.length);
-      for (let i = 0; i < pcm16.length; i++) {
-        float32[i] = pcm16[i] / 32768;
-      }
-      const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
-      audioBuffer.getChannelData(0).set(float32);
-      const bufferSource = audioContext.createBufferSource();
-      bufferSource.buffer = audioBuffer;
-      bufferSource.connect(audioContext.destination);
-      
-      bufferSource.onended = () => {
-        isPlayingRef.current = false;
-        playNextAudio(); // 다음 오디오 재생
-      };
-      
-      bufferSource.start();
-    } catch (error) {
-      console.error('오디오 재생 에러:', error);
-      isPlayingRef.current = false;
-      playNextAudio();
-    }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
-    if (wsRef.current) wsRef.current.close();
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    if (audioContextRef.current) audioContextRef.current.close();
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
+    isListeningRef.current = false;
     setIsVoiceMode(false);
     setStatus('대기중');
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    window.speechSynthesis.cancel();
     addMessage('🔇 보이스 모드 종료', false);
   };
 
@@ -182,15 +153,19 @@ function AgentPage() {
   const makeCall = async (name, phone) => {
     setStatus('전화 연결중...');
     addMessage(`📞 ${name}님께 전화 연결중...`, false);
+    await speakGenie(`${name}님께 전화를 연결합니다.`);
+    
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
       const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`);
       const data = await response.json();
+      
       if (data.success) {
         setCurrentCall({ name, phone });
         addMessage(`✅ ${name}님과 통화중`, false);
         setStatus('통화중');
+        await speakGenie(`${name}님과 연결되었습니다.`);
       } else {
         addMessage(`❌ 연결 실패: ${data.error}`, false);
         setStatus('대기중');
@@ -205,6 +180,7 @@ function AgentPage() {
   const endCall = () => {
     if (currentCall) {
       addMessage(`📴 ${currentCall.name}님과의 통화 종료`, false);
+      speakGenie('통화가 종료되었습니다.');
       setCurrentCall(null);
       setStatus('대기중');
     }
@@ -215,34 +191,13 @@ function AgentPage() {
     if (!inputText.trim()) return;
     const text = inputText;
     setInputText('');
-    addMessage(text, true);
+    addMessage(`🗣️ ${text}`, true);
 
-    if (text.includes('지니') && text.length < 10) {
-      addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
-      speakLocal('네, 대표님! 무엇을 도와드릴까요?');
-      return;
-    }
-
-    const phoneMatch = text.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
-    if (text.includes('전화') && phoneMatch) {
-      const nameMatch = text.match(/([가-힣]{2,4})/);
-      const name = nameMatch ? nameMatch[1] : '고객';
-      makeCall(name, phoneMatch[0]);
-      return;
-    }
-
-    addMessage('🧞 네, 대표님. 확인했습니다.', false);
-    speakLocal('네, 대표님. 확인했습니다.');
-  };
-
-  // 로컬 TTS
-  const speakLocal = (text) => {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ko-KR';
-    utterance.rate = 1.0;
-    utterance.pitch = 1.2;
-    window.speechSynthesis.speak(utterance);
+    setStatus('생각중...');
+    const reply = await askGenie(text);
+    addMessage(`🧞 ${reply}`, false);
+    setStatus('대기중');
+    await speakGenie(reply);
   };
 
   return (
@@ -274,7 +229,7 @@ function AgentPage() {
         <div className="voice-banner">
           <div className="voice-info">
             <span className="voice-icon">🎙️</span>
-            <span>"지니야" 라고 불러주세요</span>
+            <span>듣고 있어요 - 말씀하세요</span>
           </div>
           <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
         </div>
@@ -285,7 +240,7 @@ function AgentPage() {
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>🎙️ 버튼을 누르고 "지니야"라고 불러주세요.</p>
+            <p>🎙️ 버튼을 누르고 말씀해주세요.</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -300,9 +255,9 @@ function AgentPage() {
       </div>
 
       <div className="quick-actions">
-        <button onClick={() => {
+        <button onClick={async () => {
           addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
-          speakLocal('네, 대표님! 무엇을 도와드릴까요?');
+          await speakGenie('네, 대표님! 무엇을 도와드릴까요?');
         }}>🧞 지니야</button>
         <button disabled={!currentCall} onClick={endCall}>📴 종료</button>
       </div>
