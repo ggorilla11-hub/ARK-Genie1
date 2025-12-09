@@ -12,6 +12,7 @@ function AgentPage() {
   const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
   const voiceModeRef = useRef(false);
+  const isSpeakingRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -28,9 +29,15 @@ function AgentPage() {
     }]);
   };
 
-  // 지니 음성 응답
+  // 지니 음성 응답 (말하는 동안 마이크 중지)
   const speakGenie = (text) => {
     return new Promise((resolve) => {
+      // 마이크 일시 중지
+      isSpeakingRef.current = true;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch(e) {}
+      }
+      
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ko-KR';
@@ -42,8 +49,14 @@ function AgentPage() {
       const koreanVoice = voices.find(v => v.lang.includes('ko'));
       if (koreanVoice) utterance.voice = koreanVoice;
       
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
+      utterance.onend = () => {
+        isSpeakingRef.current = false;
+        resolve();
+      };
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
+        resolve();
+      };
       
       window.speechSynthesis.speak(utterance);
     });
@@ -65,8 +78,16 @@ function AgentPage() {
     }
   };
 
-  // 음성 인식 시작 (계속 켜져있음)
+  // 음성 인식 시작
   const startRecognition = () => {
+    // 지니가 말하는 중이면 대기
+    if (isSpeakingRef.current) {
+      setTimeout(() => {
+        if (voiceModeRef.current) startRecognition();
+      }, 500);
+      return;
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('음성 인식을 지원하지 않는 브라우저입니다.');
       return;
@@ -79,10 +100,14 @@ function AgentPage() {
     recognition.continuous = false;
     recognition.interimResults = false;
 
+    recognition.onstart = () => {
+      setStatus('듣는중...');
+    };
+
     recognition.onresult = async (event) => {
       const transcript = event.results[0][0].transcript.trim();
       
-      if (transcript) {
+      if (transcript && !isSpeakingRef.current) {
         console.log('인식됨:', transcript);
         addMessage(`🗣️ ${transcript}`, true);
         
@@ -92,41 +117,36 @@ function AgentPage() {
         addMessage(`🧞 ${reply}`, false);
         await speakGenie(reply);
         
-        // 음성 응답 후 다시 듣기 시작
+        // 음성 응답 완료 후 다시 듣기
         if (voiceModeRef.current) {
-          setStatus('듣는중...');
           setTimeout(() => {
-            if (voiceModeRef.current) {
+            if (voiceModeRef.current && !isSpeakingRef.current) {
               startRecognition();
             }
-          }, 300);
+          }, 500);
         }
       }
     };
 
     recognition.onerror = (event) => {
       console.log('음성 인식 에러:', event.error);
-      // 에러 나도 보이스 모드면 다시 시작
-      if (voiceModeRef.current && event.error !== 'aborted') {
+      if (voiceModeRef.current && !isSpeakingRef.current && event.error !== 'aborted') {
         setTimeout(() => {
-          if (voiceModeRef.current) {
+          if (voiceModeRef.current && !isSpeakingRef.current) {
             startRecognition();
           }
-        }, 500);
+        }, 1000);
       }
     };
 
     recognition.onend = () => {
-      console.log('음성 인식 종료');
-      // 보이스 모드면 다시 시작
-      if (voiceModeRef.current) {
+      if (voiceModeRef.current && !isSpeakingRef.current) {
         setTimeout(() => {
-          if (voiceModeRef.current) {
-            setStatus('듣는중...');
+          if (voiceModeRef.current && !isSpeakingRef.current) {
             startRecognition();
           }
-        }, 300);
-      } else {
+        }, 500);
+      } else if (!voiceModeRef.current) {
         setStatus('대기중');
       }
     };
@@ -136,23 +156,24 @@ function AgentPage() {
   };
 
   // 보이스 모드 시작
-  const startVoiceMode = async () => {
+  const startVoiceMode = () => {
     voiceModeRef.current = true;
+    isSpeakingRef.current = false;
     setIsVoiceMode(true);
     setStatus('듣는중...');
     addMessage('🎙️ 보이스 모드 시작 - 말씀하세요!', false);
-    
     startRecognition();
   };
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
     voiceModeRef.current = false;
+    isSpeakingRef.current = false;
     setIsVoiceMode(false);
     setStatus('대기중');
     
     if (recognitionRef.current) {
-      recognitionRef.current.abort();
+      try { recognitionRef.current.abort(); } catch(e) {}
     }
     window.speechSynthesis.cancel();
     addMessage('🔇 보이스 모드 종료', false);
@@ -238,7 +259,7 @@ function AgentPage() {
         <div className="voice-banner">
           <div className="voice-info">
             <span className="voice-icon">🎙️</span>
-            <span>듣고 있어요 - 말씀하세요</span>
+            <span>듣고 있어요</span>
           </div>
           <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
         </div>
