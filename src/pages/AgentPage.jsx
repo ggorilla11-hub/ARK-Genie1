@@ -6,7 +6,7 @@ const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
 function AgentPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('대기중');
   const [currentCall, setCurrentCall] = useState(null);
@@ -14,11 +14,15 @@ function AgentPage() {
   const recognitionRef = useRef(null);
 
   // 음성 합성 (지니 목소리)
-  const speak = (text) => {
+  const speak = (text, callback) => {
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ko-KR';
     utterance.rate = 1.0;
-    utterance.pitch = 1.1;
+    utterance.pitch = 1.2;
+    if (callback) {
+      utterance.onend = callback;
+    }
     window.speechSynthesis.speak(utterance);
   };
 
@@ -27,6 +31,13 @@ function AgentPage() {
       chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // 보이스 모드 종료 시 recognition 정리
+  useEffect(() => {
+    if (!isVoiceMode && recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  }, [isVoiceMode]);
 
   const addMessage = (text, isUser, cardData = null) => {
     const newMsg = {
@@ -39,6 +50,13 @@ function AgentPage() {
     setMessages(prev => [...prev, newMsg]);
   };
 
+  // 지니야 호출 감지 (유사 발음 포함)
+  const isGenieCall = (text) => {
+    const lower = text.toLowerCase().replace(/\s/g, '');
+    const patterns = ['지니야', '지니아', '지니', '진희야', '진희아', '진이야', '진이아', '지은아', '지은이', '지니님', '지은아'];
+    return patterns.some(p => lower.includes(p));
+  };
+
   // 전화 걸기
   const makeCall = async (name, phone) => {
     setIsProcessing(true);
@@ -47,7 +65,7 @@ function AgentPage() {
     speak(`${name}님께 전화를 연결합니다.`);
 
     try {
-      const formattedPhone = phone.replace(/-/g, '');
+      const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') 
         ? '+82' + formattedPhone.slice(1) 
         : formattedPhone;
@@ -71,10 +89,12 @@ function AgentPage() {
       } else {
         addMessage(`❌ 전화 연결 실패: ${data.error}`, false);
         setStatus('대기중');
+        speak('전화 연결에 실패했습니다.');
       }
     } catch (error) {
-      addMessage(`⏳ 서버 연결중... 잠시 후 다시 시도해주세요.`, false);
+      addMessage(`⏳ 서버 준비중... 10초 후 다시 시도해주세요.`, false);
       setStatus('대기중');
+      speak('서버가 준비중입니다. 잠시 후 다시 시도해주세요.');
     }
     setIsProcessing(false);
   };
@@ -92,56 +112,101 @@ function AgentPage() {
     }
   };
 
-  // 음성 인식 시작
-  const startListening = () => {
+  // 보이스 모드 시작 (연속 대화)
+  const startVoiceMode = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('이 브라우저는 음성 인식을 지원하지 않습니다.');
       return;
     }
 
+    setIsVoiceMode(true);
+    setStatus('듣는중...');
+    speak('네, 대표님! 무엇을 도와드릴까요?', () => {
+      startContinuousListening();
+    });
+    addMessage('🎙️ 보이스 모드가 시작되었습니다. "지니야"라고 불러주세요.', false);
+  };
+
+  // 연속 음성 인식
+  const startContinuousListening = () => {
+    if (!isVoiceMode) return;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
     recognition.lang = 'ko-KR';
-    recognition.continuous = false;
+    recognition.continuous = true;
     recognition.interimResults = false;
 
-    recognition.onstart = () => {
-      setIsListening(true);
-      setStatus('듣는중...');
-    };
-
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      processVoiceCommand(transcript);
+      const lastResult = event.results[event.results.length - 1];
+      if (lastResult.isFinal) {
+        const transcript = lastResult[0].transcript.trim();
+        if (transcript) {
+          processVoiceCommand(transcript);
+        }
+      }
     };
 
-    recognition.onerror = () => {
-      setIsListening(false);
-      setStatus('대기중');
+    recognition.onerror = (event) => {
+      console.log('음성 인식 에러:', event.error);
+      if (event.error === 'no-speech' && isVoiceMode) {
+        // 음성 없으면 다시 시작
+        setTimeout(() => startContinuousListening(), 100);
+      }
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      if (status === '듣는중...') setStatus('대기중');
+      // 보이스 모드 중이면 다시 시작
+      if (isVoiceMode) {
+        setTimeout(() => startContinuousListening(), 100);
+      }
     };
 
     recognitionRef.current = recognition;
     recognition.start();
   };
 
+  // 보이스 모드 종료
+  const stopVoiceMode = () => {
+    setIsVoiceMode(false);
+    setStatus('대기중');
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    addMessage('🔇 보이스 모드가 종료되었습니다.', false);
+    speak('보이스 모드를 종료합니다.');
+  };
+
   // 음성 명령 처리
   const processVoiceCommand = (command) => {
     addMessage(command, true);
-    const lowerCommand = command.toLowerCase();
 
     // "지니야" 호출 감지
-    if (lowerCommand.includes('지니') || lowerCommand.includes('지니야')) {
-      speak('네, 대표님! 무엇을 도와드릴까요?');
-      addMessage('네, 대표님! 무엇을 도와드릴까요?', false);
-      return;
+    if (isGenieCall(command)) {
+      // 단순 호출인지 명령 포함인지 확인
+      const cleanCommand = command.replace(/지니야?|진희야?|진이야?|지은아?/gi, '').trim();
+      
+      if (cleanCommand.length < 3) {
+        // 단순 호출
+        speak('네, 대표님! 무엇을 도와드릴까요?');
+        addMessage('네, 대표님! 무엇을 도와드릴까요? 🧞', false);
+        return;
+      } else {
+        // 명령 포함
+        processActualCommand(cleanCommand);
+        return;
+      }
     }
 
-    // 전화 명령 파싱
+    // 일반 명령 처리
+    processActualCommand(command);
+  };
+
+  // 실제 명령 처리
+  const processActualCommand = (command) => {
+    const lowerCommand = command.toLowerCase();
+
+    // 전화 명령
     const phoneMatch = command.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
     const nameMatch = command.match(/([가-힣]{2,4})(?:에게|한테|님|씨|고객)?/);
 
@@ -153,24 +218,29 @@ function AgentPage() {
         const phone = inputText.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/)[0];
         const name = nameMatch ? nameMatch[1] : '고객';
         makeCall(name, phone);
+        setInputText('');
       } else {
-        speak('전화번호를 말씀해주시거나 입력창에 입력해주세요.');
+        speak('전화번호를 말씀해주시거나 입력창에 입력해주세요, 대표님.');
         addMessage('📱 전화번호를 말씀해주시거나 입력창에 입력해주세요.', false);
       }
     } else if (lowerCommand.includes('종료') || lowerCommand.includes('끊어')) {
-      endCall();
+      if (currentCall) {
+        endCall();
+      } else if (isVoiceMode) {
+        stopVoiceMode();
+      }
     } else if (lowerCommand.includes('카톡') || lowerCommand.includes('문자') || lowerCommand.includes('메시지')) {
-      speak('카카오톡 발송 기능은 준비중입니다.');
+      speak('카카오톡 발송 기능은 준비중입니다, 대표님.');
       addMessage('💬 카카오톡/문자 발송 기능 준비중...', false, { type: 'pending', feature: '카톡/문자' });
     } else if (lowerCommand.includes('일정') || lowerCommand.includes('예약') || lowerCommand.includes('약속')) {
-      speak('일정 등록 기능은 준비중입니다.');
+      speak('일정 등록 기능은 준비중입니다, 대표님.');
       addMessage('📅 일정 등록 기능 준비중...', false, { type: 'pending', feature: '캘린더' });
     } else if (lowerCommand.includes('기록') || lowerCommand.includes('저장') || lowerCommand.includes('시트')) {
-      speak('고객현황판 기록 기능은 준비중입니다.');
+      speak('고객현황판 기록 기능은 준비중입니다, 대표님.');
       addMessage('📊 고객현황판 기록 기능 준비중...', false, { type: 'pending', feature: '시트' });
     } else {
-      speak(`네, 대표님. 말씀하신 내용을 처리하겠습니다.`);
-      addMessage(`🧞 "${command}" 명령을 처리중입니다...`, false);
+      speak(`네, 대표님. 말씀하신 내용을 확인했습니다.`);
+      addMessage(`🧞 네, 대표님. "${command}" 확인했습니다.`, false);
     }
   };
 
@@ -183,7 +253,7 @@ function AgentPage() {
 
   // 파일 업로드 (준비중)
   const handleFileUpload = () => {
-    speak('파일 업로드 기능은 준비중입니다.');
+    speak('파일 업로드 기능은 준비중입니다, 대표님.');
     addMessage('📁 파일 업로드 기능 준비중...', false);
   };
 
@@ -198,7 +268,7 @@ function AgentPage() {
             <span className="header-subtitle">음성 비서</span>
           </div>
         </div>
-        <div className={`status-badge ${isListening ? 'listening' : isProcessing ? 'processing' : currentCall ? 'oncall' : ''}`}>
+        <div className={`status-badge ${isVoiceMode ? 'voice-mode' : isProcessing ? 'processing' : currentCall ? 'oncall' : ''}`}>
           {status}
         </div>
       </header>
@@ -214,13 +284,24 @@ function AgentPage() {
         </div>
       )}
 
+      {/* 보이스 모드 배너 */}
+      {isVoiceMode && !currentCall && (
+        <div className="voice-banner">
+          <div className="voice-info">
+            <span className="voice-icon">🎙️</span>
+            <span>보이스 모드 - "지니야"라고 불러주세요</span>
+          </div>
+          <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
+        </div>
+      )}
+
       {/* 채팅 영역 */}
       <div className="chat-area" ref={chatAreaRef}>
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>음성 또는 텍스트로 명령해주세요.</p>
+            <p>보이스 버튼을 눌러 대화를 시작하세요.</p>
             <div className="example-commands">
               <p>💡 이렇게 말해보세요:</p>
               <span>"지니야"</span>
@@ -271,7 +352,10 @@ function AgentPage() {
 
       {/* 빠른 액션 */}
       <div className="quick-actions">
-        <button onClick={() => { speak('네, 대표님!'); addMessage('네, 대표님! 무엇을 도와드릴까요?', false); }}>
+        <button onClick={() => { 
+          speak('네, 대표님! 무엇을 도와드릴까요?'); 
+          addMessage('네, 대표님! 무엇을 도와드릴까요? 🧞', false); 
+        }}>
           🧞 지니야
         </button>
         <button onClick={handleFileUpload}>📁 파일</button>
@@ -282,11 +366,10 @@ function AgentPage() {
       <div className="input-area">
         <button className="icon-btn" onClick={handleFileUpload}>📎</button>
         <button 
-          className={`voice-btn ${isListening ? 'listening' : ''}`}
-          onClick={startListening}
-          disabled={isProcessing}
+          className={`voice-btn ${isVoiceMode ? 'active' : ''}`}
+          onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
         >
-          🎙️
+          {isVoiceMode ? '🔴' : '🎙️'}
         </button>
         <input
           type="text"
