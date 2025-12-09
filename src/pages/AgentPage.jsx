@@ -14,7 +14,6 @@ function AgentPage() {
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
-  const processorRef = useRef(null);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -31,21 +30,14 @@ function AgentPage() {
     }]);
   };
 
-  // 보이스 모드 시작 (OpenAI Realtime API 연결)
+  // 보이스 모드 시작
   const startVoiceMode = async () => {
     try {
       setStatus('연결중...');
       addMessage('🎙️ 음성 연결중...', false);
 
-      // 마이크 권한 요청
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 24000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
-        } 
-      });
+      // 마이크 권한 요청 (단순화)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
       // WebSocket 연결
@@ -58,35 +50,34 @@ function AgentPage() {
         setIsVoiceMode(true);
         addMessage('🎙️ 연결됨! "지니야"라고 불러주세요.', false);
         
-        // 서버에 시작 알림
         ws.send(JSON.stringify({ type: 'start' }));
-
-        // 오디오 처리 시작
         startAudioProcessing(stream, ws);
       };
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        
-        // 텍스트 응답 처리
-        if (msg.type === 'transcript') {
-          if (msg.role === 'user') {
-            addMessage(msg.text, true);
-          } else {
-            addMessage(`🧞 ${msg.text}`, false);
+        try {
+          const msg = JSON.parse(event.data);
+          
+          if (msg.type === 'transcript') {
+            if (msg.role === 'user') {
+              addMessage(msg.text, true);
+            } else {
+              addMessage(`🧞 ${msg.text}`, false);
+            }
           }
-        }
 
-        // 오디오 응답 재생
-        if (msg.type === 'audio' && msg.data) {
-          playAudio(msg.data);
+          if (msg.type === 'audio' && msg.data) {
+            playAudio(msg.data);
+          }
+        } catch (e) {
+          console.error('메시지 파싱 에러:', e);
         }
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket 에러:', error);
         setStatus('연결 실패');
-        addMessage('❌ 연결 실패. 다시 시도해주세요.', false);
+        addMessage('❌ 서버 연결 실패. 다시 시도해주세요.', false);
       };
 
       ws.onclose = () => {
@@ -98,72 +89,58 @@ function AgentPage() {
     } catch (error) {
       console.error('마이크 에러:', error);
       setStatus('대기중');
-      addMessage('❌ 마이크 권한이 필요합니다.', false);
+      addMessage('❌ 마이크 권한이 필요합니다. 브라우저 설정에서 마이크를 허용해주세요.', false);
     }
   };
 
-  // 오디오 처리 (마이크 → 서버)
+  // 오디오 처리
   const startAudioProcessing = (stream, ws) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)({
-      sampleRate: 24000
-    });
-    audioContextRef.current = audioContext;
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = audioContext;
 
-    const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    processorRef.current = processor;
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
-    processor.onaudioprocess = (e) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Float32 → PCM16 변환
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+      processor.onaudioprocess = (e) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const inputData = e.inputBuffer.getChannelData(0);
+          const pcm16 = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+          }
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+          ws.send(JSON.stringify({ type: 'audio', data: base64 }));
         }
-        
-        // Base64 인코딩
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-        
-        ws.send(JSON.stringify({
-          type: 'audio',
-          data: base64
-        }));
-      }
-    };
+      };
 
-    source.connect(processor);
-    processor.connect(audioContext.destination);
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+    } catch (e) {
+      console.error('오디오 처리 에러:', e);
+    }
   };
 
-  // 오디오 재생 (서버 → 스피커)
+  // 오디오 재생
   const playAudio = async (base64Data) => {
     try {
       const audioContext = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Base64 → ArrayBuffer
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      
-      // PCM16 → Float32
       const pcm16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
         float32[i] = pcm16[i] / 32768;
       }
-
-      // AudioBuffer 생성 및 재생
       const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
-      
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.start();
+      const bufferSource = audioContext.createBufferSource();
+      bufferSource.buffer = audioBuffer;
+      bufferSource.connect(audioContext.destination);
+      bufferSource.start();
     } catch (error) {
       console.error('오디오 재생 에러:', error);
     }
@@ -171,19 +148,11 @@ function AgentPage() {
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    if (wsRef.current) wsRef.current.close();
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-    }
-    
+    if (audioContextRef.current) audioContextRef.current.close();
     setIsVoiceMode(false);
     setStatus('대기중');
     addMessage('🔇 보이스 모드 종료', false);
@@ -193,14 +162,11 @@ function AgentPage() {
   const makeCall = async (name, phone) => {
     setStatus('전화 연결중...');
     addMessage(`📞 ${name}님께 전화 연결중...`, false);
-
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
-      
       const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`);
       const data = await response.json();
-      
       if (data.success) {
         setCurrentCall({ name, phone });
         addMessage(`✅ ${name}님과 통화중`, false);
@@ -224,23 +190,19 @@ function AgentPage() {
     }
   };
 
-  // 텍스트 명령 처리
+  // 텍스트 전송
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    
     const text = inputText;
     setInputText('');
     addMessage(text, true);
 
-    // 지니야 호출
-    const isGenie = text.includes('지니');
-    if (isGenie && text.length < 10) {
+    if (text.includes('지니') && text.length < 10) {
       addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
       speakLocal('네, 대표님! 무엇을 도와드릴까요?');
       return;
     }
 
-    // 전화 명령
     const phoneMatch = text.match(/(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
     if (text.includes('전화') && phoneMatch) {
       const nameMatch = text.match(/([가-힣]{2,4})/);
@@ -253,8 +215,9 @@ function AgentPage() {
     speakLocal('네, 대표님. 확인했습니다.');
   };
 
-  // 로컬 TTS (텍스트 입력용)
+  // 로컬 TTS
   const speakLocal = (text) => {
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ko-KR';
     utterance.rate = 1.0;
