@@ -14,6 +14,8 @@ function AgentPage() {
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const audioQueueRef = useRef([]);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -23,7 +25,7 @@ function AgentPage() {
 
   const addMessage = (text, isUser) => {
     setMessages(prev => [...prev, {
-      id: Date.now(),
+      id: Date.now() + Math.random(),
       text,
       isUser,
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -36,11 +38,9 @@ function AgentPage() {
       setStatus('연결중...');
       addMessage('🎙️ 음성 연결중...', false);
 
-      // 마이크 권한 요청 (단순화)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
 
-      // WebSocket 연결
       const ws = new WebSocket(WS_SERVER);
       wsRef.current = ws;
 
@@ -58,16 +58,19 @@ function AgentPage() {
         try {
           const msg = JSON.parse(event.data);
           
+          // 사용자 음성 인식 결과 표시
           if (msg.type === 'transcript') {
             if (msg.role === 'user') {
-              addMessage(msg.text, true);
+              addMessage(`🗣️ ${msg.text}`, true);
             } else {
               addMessage(`🧞 ${msg.text}`, false);
             }
           }
 
+          // 오디오 큐에 추가 (겹침 방지)
           if (msg.type === 'audio' && msg.data) {
-            playAudio(msg.data);
+            audioQueueRef.current.push(msg.data);
+            playNextAudio();
           }
         } catch (e) {
           console.error('메시지 파싱 에러:', e);
@@ -89,7 +92,7 @@ function AgentPage() {
     } catch (error) {
       console.error('마이크 에러:', error);
       setStatus('대기중');
-      addMessage('❌ 마이크 권한이 필요합니다. 브라우저 설정에서 마이크를 허용해주세요.', false);
+      addMessage('❌ 마이크 권한이 필요합니다.', false);
     }
   };
 
@@ -121,10 +124,17 @@ function AgentPage() {
     }
   };
 
-  // 오디오 재생
-  const playAudio = async (base64Data) => {
+  // 오디오 순차 재생 (겹침 방지)
+  const playNextAudio = async () => {
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
+    
+    isPlayingRef.current = true;
+    const base64Data = audioQueueRef.current.shift();
+    
     try {
       const audioContext = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioContextRef.current) audioContextRef.current = audioContext;
+      
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
@@ -140,9 +150,17 @@ function AgentPage() {
       const bufferSource = audioContext.createBufferSource();
       bufferSource.buffer = audioBuffer;
       bufferSource.connect(audioContext.destination);
+      
+      bufferSource.onended = () => {
+        isPlayingRef.current = false;
+        playNextAudio(); // 다음 오디오 재생
+      };
+      
       bufferSource.start();
     } catch (error) {
       console.error('오디오 재생 에러:', error);
+      isPlayingRef.current = false;
+      playNextAudio();
     }
   };
 
@@ -153,6 +171,8 @@ function AgentPage() {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
     if (audioContextRef.current) audioContextRef.current.close();
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
     setIsVoiceMode(false);
     setStatus('대기중');
     addMessage('🔇 보이스 모드 종료', false);
