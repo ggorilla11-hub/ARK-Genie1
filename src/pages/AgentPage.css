@@ -1,11 +1,11 @@
 .agent-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 100vh;
+  height: calc(100vh - 70px);
+  min-height: 0;
   background: #f5f5f5;
   color: #333;
-  padding-bottom: 70px; /* 네비게이션 바 공간 */
+  overflow: hidden;
 }
 
 /* ===== 헤더 ===== */
@@ -16,6 +16,7 @@
   padding: 15px 20px;
   background: linear-gradient(135deg, #FFA500 0%, #FF8C00 100%);
   color: white;
+  flex-shrink: 0;
 }
 
 .header-avatar {
@@ -91,7 +92,8 @@
   background: linear-gradient(135deg, #5C9EAD 0%, #4A8A99 100%);
   color: white;
   text-align: center;
-  padding: 20px;
+  padding: 15px;
+  flex-shrink: 0;
 }
 
 .agent-guide > span {
@@ -100,21 +102,21 @@
 }
 
 .guide-main {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  margin: 10px 0 5px;
+  margin: 8px 0 4px;
 }
 
 .guide-sub {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.9;
+  margin: 0;
 }
 
 /* ===== 대화창 ===== */
 .chat-container {
   flex: 1;
-  min-height: 200px;
-  max-height: 35vh;
+  min-height: 100px;
   overflow-y: auto;
   padding: 15px;
   background: #1a1a2e;
@@ -124,17 +126,21 @@
 }
 
 .chat-container::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .chat-container::-webkit-scrollbar-track {
   background: rgba(255,255,255,0.1);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .chat-container::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.3);
-  border-radius: 3px;
+  background: rgba(255,255,255,0.4);
+  border-radius: 4px;
+}
+
+.chat-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.6);
 }
 
 .chat-empty {
@@ -154,6 +160,7 @@
 
 .chat-empty p {
   font-size: 14px;
+  margin: 0;
 }
 
 .chat-message {
@@ -218,13 +225,14 @@
 /* ===== 입력 영역 ===== */
 .input-section {
   background: #5C9EAD;
-  padding: 15px;
+  padding: 12px 15px;
+  flex-shrink: 0;
 }
 
 .action-buttons {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -233,20 +241,20 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 15px;
+  gap: 3px;
+  padding: 8px 12px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255,255,255,0.2);
   color: white;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 55px;
+  min-width: 48px;
 }
 
 .action-btn span:first-child {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .action-btn:hover {
@@ -256,7 +264,7 @@
 
 .action-btn.voice-btn {
   background: #FFA500;
-  padding: 10px 25px;
+  padding: 8px 20px;
 }
 
 .action-btn.voice-btn.active {
@@ -281,7 +289,7 @@
 
 .text-input-wrapper input {
   flex: 1;
-  padding: 14px 18px;
+  padding: 12px 16px;
   border: none;
   border-radius: 25px;
   font-size: 15px;
@@ -294,8 +302,8 @@
 }
 
 .send-btn {
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
   border: none;
   background: #D4A574;
@@ -317,38 +325,42 @@
 .timeline-section {
   background: white;
   border-top: 1px solid #e0e0e0;
-  max-height: 180px;
+  height: 140px;
+  min-height: 140px;
+  max-height: 140px;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .timeline-header {
-  padding: 12px 15px;
-  font-size: 14px;
+  padding: 10px 15px;
+  font-size: 13px;
   font-weight: 600;
   color: #333;
   background: #f9f9f9;
   border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
 }
 
 .timeline-content {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 15px;
+  padding: 8px 15px;
 }
 
 .timeline-content::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .timeline-content::-webkit-scrollbar-track {
   background: #f0f0f0;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .timeline-content::-webkit-scrollbar-thumb {
   background: #ccc;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .timeline-content::-webkit-scrollbar-thumb:hover {
@@ -359,16 +371,16 @@
   text-align: center;
   color: #999;
   font-size: 13px;
-  padding: 20px;
+  padding: 15px;
 }
 
 .timeline-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 0;
+  padding: 8px 0;
   border-bottom: 1px solid #f0f0f0;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .timeline-item:last-child {
@@ -376,8 +388,8 @@
 }
 
 .timeline-icon {
-  font-size: 18px;
-  width: 24px;
+  font-size: 16px;
+  width: 22px;
   text-align: center;
 }
 
@@ -399,8 +411,8 @@
 }
 
 .timeline-status {
-  font-size: 16px;
-  width: 24px;
+  font-size: 14px;
+  width: 22px;
   text-align: center;
 }
 
@@ -425,33 +437,51 @@
 /* ===== 반응형 - 모바일 ===== */
 @media (max-width: 768px) {
   .agent-page {
-    padding-bottom: 60px;
+    height: calc(100vh - 60px);
+  }
+
+  .agent-header {
+    padding: 12px 15px;
+  }
+
+  .header-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .header-title {
+    font-size: 16px;
+  }
+
+  .agent-guide {
+    padding: 12px;
+  }
+
+  .guide-main {
+    font-size: 16px;
   }
 
   .chat-container {
-    max-height: 30vh;
-    min-height: 150px;
+    min-height: 80px;
   }
 
-  .action-buttons {
-    gap: 6px;
+  .input-section {
+    padding: 10px 12px;
   }
 
   .action-btn {
-    padding: 8px 12px;
-    min-width: 50px;
+    padding: 6px 10px;
+    min-width: 44px;
   }
 
   .action-btn span:first-child {
-    font-size: 18px;
-  }
-
-  .action-btn.voice-btn {
-    padding: 8px 20px;
+    font-size: 16px;
   }
 
   .timeline-section {
-    max-height: 150px;
+    height: 120px;
+    min-height: 120px;
+    max-height: 120px;
   }
 }
 
@@ -461,13 +491,12 @@
     max-width: 500px;
     margin: 0 auto;
     box-shadow: 0 0 20px rgba(0,0,0,0.1);
-  }
-
-  .chat-container {
-    max-height: 40vh;
+    height: calc(100vh - 70px);
   }
 
   .timeline-section {
-    max-height: 200px;
+    height: 160px;
+    min-height: 160px;
+    max-height: 160px;
   }
 }
