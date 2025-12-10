@@ -5,20 +5,22 @@ function AgentPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [status, setStatus] = useState('대기중'); // 대기중, 듣는중, 처리중, 통화중
+  const [status, setStatus] = useState('대기중');
   const [timeline, setTimeline] = useState([]);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [showCallPopup, setShowCallPopup] = useState(false);
   const [callState, setCallState] = useState({ name: '', phone: '', duration: 0, status: '' });
   const [isTyping, setIsTyping] = useState(false);
+  const [currentTranscript, setCurrentTranscript] = useState('');
   
   const recognitionRef = useRef(null);
   const silenceTimerRef = useRef(null);
   const callTimerRef = useRef(null);
   const chatEndRef = useRef(null);
-  const transcriptRef = useRef('');
+  const isListeningRef = useRef(false);
+  const isProcessingRef = useRef(false);
   
-  const SILENCE_TIMEOUT = 1200; // 1.2초 무음 감지
+  const SILENCE_TIMEOUT = 1500; // 1.5초 무음 감지
   const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
 
   // 메시지 추가
@@ -33,17 +35,6 @@ function AgentPage() {
     setTimeline(prev => [...prev, { id: Date.now(), icon, text, status }]);
   };
 
-  // 타임라인 상태 업데이트
-  const updateTimelineStatus = (id, newStatus) => {
-    setTimeline(prev => prev.map(item => 
-      item.id === id ? { ...item, status: newStatus } : item
-    ));
-  };
-
-  // 타이핑 표시
-  const showTyping = () => setIsTyping(true);
-  const hideTyping = () => setIsTyping(false);
-
   // TTS 음성 출력
   const speak = (text) => {
     return new Promise((resolve) => {
@@ -54,20 +45,40 @@ function AgentPage() {
         utterance.rate = 1.0;
         utterance.pitch = 1.1;
         
-        // 한국어 여성 음성 선택
         const voices = window.speechSynthesis.getVoices();
         const koreanVoice = voices.find(v => v.lang.includes('ko') && v.name.includes('Female')) 
           || voices.find(v => v.lang.includes('ko'))
           || voices[0];
         if (koreanVoice) utterance.voice = koreanVoice;
         
-        utterance.onend = resolve;
+        utterance.onend = () => {
+          // 지니가 말 끝나면 다시 듣기 모드로 (보이스 모드가 켜져있을 때만)
+          if (isListeningRef.current) {
+            setTimeout(() => {
+              restartRecognition();
+            }, 300);
+          }
+          resolve();
+        };
         utterance.onerror = resolve;
         window.speechSynthesis.speak(utterance);
       } else {
         resolve();
       }
     });
+  };
+
+  // 음성 인식 재시작
+  const restartRecognition = () => {
+    if (recognitionRef.current && isListeningRef.current && !isProcessingRef.current) {
+      try {
+        recognitionRef.current.start();
+        setStatus('듣는중');
+        setCurrentTranscript('');
+      } catch (e) {
+        console.log('재시작:', e.message);
+      }
+    }
   };
 
   // 음성 인식 초기화
@@ -80,6 +91,8 @@ function AgentPage() {
       recognitionRef.current.lang = 'ko-KR';
 
       recognitionRef.current.onresult = (event) => {
+        if (isProcessingRef.current) return;
+        
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -92,43 +105,43 @@ function AgentPage() {
           }
         }
 
+        // 현재 인식 중인 텍스트 표시
+        if (interimTranscript) {
+          setCurrentTranscript(interimTranscript);
+        }
+
         // 무음 타이머 리셋
         if (silenceTimerRef.current) {
           clearTimeout(silenceTimerRef.current);
         }
 
-        if (finalTranscript) {
-          transcriptRef.current += finalTranscript + ' ';
-        }
-
-        // 1.2초 무음 감지 후 처리
-        if (transcriptRef.current.trim()) {
+        // 최종 인식된 텍스트가 있으면 처리
+        if (finalTranscript.trim()) {
+          setCurrentTranscript(finalTranscript);
+          
+          // 1.5초 무음 후 명령 처리
           silenceTimerRef.current = setTimeout(() => {
-            const fullText = transcriptRef.current.trim();
-            if (fullText) {
-              stopListening();
-              processVoiceCommand(fullText);
-              transcriptRef.current = '';
+            if (finalTranscript.trim() && isListeningRef.current) {
+              processVoiceCommand(finalTranscript.trim());
             }
           }, SILENCE_TIMEOUT);
         }
       };
 
       recognitionRef.current.onerror = (event) => {
-        console.error('음성 인식 오류:', event.error);
-        if (event.error !== 'no-speech') {
-          stopListening();
+        console.log('음성 인식 오류:', event.error);
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          // 무음이거나 중단된 경우 다시 시작
+          if (isListeningRef.current && !isProcessingRef.current) {
+            setTimeout(() => restartRecognition(), 500);
+          }
         }
       };
 
       recognitionRef.current.onend = () => {
-        if (isListening) {
-          // 아직 듣는 중이면 다시 시작
-          try {
-            recognitionRef.current.start();
-          } catch (e) {
-            console.log('재시작 오류:', e);
-          }
+        // 보이스 모드가 켜져있고 처리 중이 아니면 다시 시작
+        if (isListeningRef.current && !isProcessingRef.current) {
+          setTimeout(() => restartRecognition(), 300);
         }
       };
     }
@@ -136,56 +149,73 @@ function AgentPage() {
     // 음성 목록 로드
     if ('speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
     }
 
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (callTimerRef.current) clearInterval(callTimerRef.current);
     };
-  }, [isListening]);
+  }, []);
 
   // 채팅 스크롤
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // 음성 인식 시작
+  // 음성 인식 시작 (보이스 모드 ON)
   const startListening = () => {
-    if (recognitionRef.current && !isListening) {
-      transcriptRef.current = '';
+    if (recognitionRef.current) {
+      isListeningRef.current = true;
+      isProcessingRef.current = false;
       setIsListening(true);
       setStatus('듣는중');
+      setCurrentTranscript('');
       try {
         recognitionRef.current.start();
       } catch (e) {
-        console.log('시작 오류:', e);
+        console.log('시작 오류:', e.message);
       }
     }
   };
 
-  // 음성 인식 중지
+  // 음성 인식 중지 (보이스 모드 OFF)
   const stopListening = () => {
+    isListeningRef.current = false;
+    isProcessingRef.current = false;
+    setIsListening(false);
+    setStatus('대기중');
+    setCurrentTranscript('');
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
     if (recognitionRef.current) {
-      setIsListening(false);
-      setStatus('대기중');
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
       try {
         recognitionRef.current.stop();
       } catch (e) {
-        console.log('중지 오류:', e);
+        console.log('중지 오류:', e.message);
       }
     }
+    window.speechSynthesis.cancel();
   };
 
   // 음성 명령 처리
   const processVoiceCommand = async (text) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+    
+    // 음성 인식 일시 중지
+    try {
+      recognitionRef.current?.stop();
+    } catch (e) {}
+    
     addMessage(text, true);
     setStatus('처리중');
-    showTyping();
+    setCurrentTranscript('');
+    setIsTyping(true);
 
-    // 명령어 분석
     const lowerText = text.toLowerCase();
     
     if (lowerText.includes('전화') || lowerText.includes('콜')) {
@@ -201,20 +231,19 @@ function AgentPage() {
     } else if (lowerText.includes('캘린더') || lowerText.includes('일정')) {
       await handleCalendarCommand(text);
     } else {
-      // 일반 대화 - GPT 응답
       await handleGeneralChat(text);
     }
+    
+    isProcessingRef.current = false;
   };
 
   // 이름과 전화번호 추출
   const extractContactInfo = (text) => {
-    // 이름 추출 (예: "홍길동", "김철수")
-    const nameMatch = text.match(/([가-힣]{2,4})(에게|한테|님|고객)/);
+    const nameMatch = text.match(/([가-힣]{2,4})(에게|한테|님|고객)?/);
     const name = nameMatch ? nameMatch[1] : '고객';
     
-    // 전화번호 추출
-    const phoneMatch = text.match(/(\d{3}[-\s]?\d{4}[-\s]?\d{4})/);
-    const phone = phoneMatch ? phoneMatch[1] : '010-1234-5678';
+    const phoneMatch = text.match(/(\d{3}[-\s]?\d{3,4}[-\s]?\d{4})/);
+    const phone = phoneMatch ? phoneMatch[1].replace(/[-\s]/g, '') : '';
     
     return { name, phone };
   };
@@ -223,39 +252,35 @@ function AgentPage() {
   const handleCallCommand = async (text) => {
     const { name, phone } = extractContactInfo(text);
     
-    hideTyping();
+    setIsTyping(false);
     addMessage(`네, ${name} 고객님께 전화 연결할게요.`, false);
     await speak(`네, ${name} 고객님께 전화 연결할게요.`);
     
-    const tlId = Date.now();
     addTimeline('📞', `${name}님께 전화 연결 중`, 'loading');
     
     setStatus('통화중');
-    setCallState({ name, phone, duration: 0, status: '연결중...' });
+    setCallState({ name, phone: phone || '010-1234-5678', duration: 0, status: '연결중...' });
     setShowCallPopup(true);
     
-    // 통화 타이머 시작
     let seconds = 0;
     callTimerRef.current = setInterval(() => {
       seconds++;
       setCallState(prev => ({ ...prev, duration: seconds }));
     }, 1000);
 
-    // 실제 전화 발신 API 호출
     try {
       const response = await fetch(`${RENDER_SERVER}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phone, customerName: name })
+        body: JSON.stringify({ to: phone || '010-1234-5678', customerName: name })
       });
       
       if (response.ok) {
         setCallState(prev => ({ ...prev, status: '통화중' }));
-        updateTimelineStatus(tlId, 'done');
+        addTimeline('📞', `${name}님과 통화 연결됨`, 'done');
       }
     } catch (error) {
       console.error('전화 발신 오류:', error);
-      // 시뮬레이션 모드로 계속 진행
       setTimeout(() => {
         setCallState(prev => ({ ...prev, status: '통화중' }));
       }, 2000);
@@ -278,7 +303,6 @@ function AgentPage() {
     
     addTimeline('📞', `통화 완료 (${durationStr})`, 'done');
     
-    // 통화 결과 카드 추가
     addMessage(`${name} 고객님과 통화 완료! 상담 예약을 진행했어요.`, false, {
       type: 'call',
       data: { name, duration: durationStr, result: '상담 예약 완료', appointment: '12/17(화) 14:00' }
@@ -292,73 +316,33 @@ function AgentPage() {
   const handleKakaoCommand = async (text) => {
     const { name } = extractContactInfo(text);
     
-    hideTyping();
-    const tlId = Date.now();
+    setIsTyping(false);
     addTimeline('💬', `${name}님께 카카오톡 발송 중`, 'loading');
     
     addMessage(`네, ${name} 고객님께 카카오톡 보낼게요.`, false);
     await speak(`네, ${name} 고객님께 카카오톡 보낼게요.`);
     
-    // 카카오 알림톡 API 호출
-    try {
-      const response = await fetch(`${RENDER_SERVER}/api/kakao`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          customerName: name,
-          message: '안녕하세요, 상담 예약 확인 안내드립니다.'
-        })
+    setTimeout(() => {
+      addTimeline('💬', '카카오톡 발송 완료', 'done');
+      addMessage(`${name} 고객님께 카카오톡 보냈어요.`, false, {
+        type: 'kakao',
+        data: { name, messageType: '상담 예약 확인' }
       });
-      
-      setTimeout(() => {
-        updateTimelineStatus(tlId, 'done');
-        addTimeline('💬', '카카오톡 발송 완료', 'done');
-        
-        addMessage(`${name} 고객님께 카카오톡 보냈어요.`, false, {
-          type: 'kakao',
-          data: { name, messageType: '상담 예약 확인' }
-        });
-        
-        setStatus('대기중');
-      }, 1500);
-      
-    } catch (error) {
-      console.error('카카오톡 발송 오류:', error);
-      setTimeout(() => {
-        updateTimelineStatus(tlId, 'done');
-        addTimeline('💬', '카카오톡 발송 완료', 'done');
-        addMessage(`${name} 고객님께 카카오톡 보냈어요.`, false, {
-          type: 'kakao',
-          data: { name, messageType: '상담 예약 확인' }
-        });
-        setStatus('대기중');
-      }, 1500);
-    }
+      setStatus('대기중');
+    }, 1500);
   };
 
   // SMS 명령 처리
   const handleSMSCommand = async (text) => {
     const { name, phone } = extractContactInfo(text);
     
-    hideTyping();
-    const tlId = Date.now();
+    setIsTyping(false);
     addTimeline('📱', `${name}님께 문자 발송 중`, 'loading');
     
     addMessage(`네, ${name} 고객님께 문자 보낼게요.`, false);
     await speak(`네, ${name} 고객님께 문자 보낼게요.`);
     
-    try {
-      await fetch(`${RENDER_SERVER}/api/sms`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phone, customerName: name, message: '상담 예약 안내' })
-      });
-    } catch (error) {
-      console.error('SMS 발송 오류:', error);
-    }
-    
     setTimeout(() => {
-      updateTimelineStatus(tlId, 'done');
       addTimeline('📱', '문자 발송 완료', 'done');
       addMessage(`${name} 고객님께 문자 보냈어요.`, false, {
         type: 'sms',
@@ -372,15 +356,13 @@ function AgentPage() {
   const handleEmailCommand = async (text) => {
     const { name } = extractContactInfo(text);
     
-    hideTyping();
-    const tlId = Date.now();
+    setIsTyping(false);
     addTimeline('📧', `${name}님께 이메일 발송 중`, 'loading');
     
     addMessage(`네, ${name} 고객님께 이메일 보낼게요.`, false);
     await speak(`네, ${name} 고객님께 이메일 보낼게요.`);
     
     setTimeout(() => {
-      updateTimelineStatus(tlId, 'done');
       addTimeline('📧', '이메일 발송 완료', 'done');
       addMessage(`${name} 고객님께 이메일 보냈어요.`, false, {
         type: 'email',
@@ -394,15 +376,13 @@ function AgentPage() {
   const handleSheetCommand = async (text) => {
     const { name } = extractContactInfo(text);
     
-    hideTyping();
-    const tlId = Date.now();
+    setIsTyping(false);
     addTimeline('📊', '고객현황판 기록 중', 'loading');
     
     addMessage(`네, 고객현황판에 기록할게요.`, false);
     await speak(`네, 고객현황판에 기록할게요.`);
     
     setTimeout(() => {
-      updateTimelineStatus(tlId, 'done');
       addTimeline('📊', '고객현황판 기록 완료', 'done');
       addMessage(`고객현황판에 기록했어요.`, false, {
         type: 'sheet',
@@ -414,15 +394,13 @@ function AgentPage() {
 
   // 캘린더 명령 처리
   const handleCalendarCommand = async (text) => {
-    hideTyping();
-    const tlId = Date.now();
+    setIsTyping(false);
     addTimeline('📅', '캘린더 일정 등록 중', 'loading');
     
     addMessage(`네, 캘린더에 일정 등록할게요.`, false);
     await speak(`네, 캘린더에 일정 등록할게요.`);
     
     setTimeout(() => {
-      updateTimelineStatus(tlId, 'done');
       addTimeline('📅', '캘린더 일정 등록 완료', 'done');
       addMessage(`캘린더에 일정 등록했어요.`, false, {
         type: 'calendar',
@@ -443,7 +421,7 @@ function AgentPage() {
       
       if (response.ok) {
         const data = await response.json();
-        hideTyping();
+        setIsTyping(false);
         addMessage(data.reply || '네, 알겠습니다!', false);
         await speak(data.reply || '네, 알겠습니다!');
       } else {
@@ -451,7 +429,7 @@ function AgentPage() {
       }
     } catch (error) {
       console.error('채팅 오류:', error);
-      hideTyping();
+      setIsTyping(false);
       addMessage('네, 알겠습니다! 무엇을 도와드릴까요?', false);
       await speak('네, 알겠습니다! 무엇을 도와드릴까요?');
     }
@@ -521,7 +499,6 @@ function AgentPage() {
                 </div>
               </div>
               
-              {/* 상태 카드 렌더링 */}
               {msg.card && (
                 <div className="status-card">
                   {msg.card.type === 'call' && (
@@ -631,7 +608,6 @@ function AgentPage() {
           ))
         )}
         
-        {/* 타이핑 표시 */}
         {isTyping && (
           <div className="typing">
             <div className="msg-avatar">🧞</div>
@@ -646,32 +622,15 @@ function AgentPage() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* 타임라인 */}
-      <div className={`timeline ${timelineOpen ? 'open' : ''}`}>
-        <div className="tl-head" onClick={() => setTimelineOpen(!timelineOpen)}>
-          <div className="tl-title">
-            <span>📋 작업 기록</span>
-            <span className="tl-badge">{timeline.length}</span>
-          </div>
-          <span className="tl-toggle">▼</span>
-        </div>
-        {timelineOpen && (
-          <div className="tl-content">
-            {timeline.map((item) => (
-              <div key={item.id} className="tl-item">
-                <div className="tl-icon">{item.icon}</div>
-                <span className="tl-text">{item.text}</span>
-                <span className={`tl-status ${item.status}`}>
-                  {item.status === 'loading' ? '진행중' : '완료'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* 입력 영역 */}
       <div className="input-area">
+        {/* 현재 인식 중인 텍스트 표시 */}
+        {isListening && currentTranscript && (
+          <div className="current-transcript">
+            🎤 {currentTranscript}
+          </div>
+        )}
+        
         <div className="quick-btns">
           <button className="btn" onClick={() => processVoiceCommand('홍길동에게 전화해줘')}>
             📞<span>전화</span>
@@ -702,6 +661,30 @@ function AgentPage() {
           />
           <button className="send-btn" onClick={handleSend}>➤</button>
         </div>
+      </div>
+
+      {/* 타임라인 */}
+      <div className={`timeline ${timelineOpen ? 'open' : ''}`}>
+        <div className="tl-head" onClick={() => setTimelineOpen(!timelineOpen)}>
+          <div className="tl-title">
+            <span>📋 작업 기록</span>
+            <span className="tl-badge">{timeline.length}</span>
+          </div>
+          <span className="tl-toggle">▼</span>
+        </div>
+        {timelineOpen && (
+          <div className="tl-content">
+            {timeline.map((item) => (
+              <div key={item.id} className="tl-item">
+                <div className="tl-icon">{item.icon}</div>
+                <span className="tl-text">{item.text}</span>
+                <span className={`tl-status ${item.status}`}>
+                  {item.status === 'loading' ? '진행중' : '완료'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 통화 팝업 */}
