@@ -1,4 +1,4 @@
-/* AgentPage.css - 시뮬레이터 디자인 완전 반영 */
+/* AgentPage.css - 보이스 모드 개선 */
 
 .agent-page {
   display: flex;
@@ -329,12 +329,29 @@
   color: white;
 }
 
-/* 입력 영역 - 하단 고정 */
+/* 입력 영역 */
 .input-area {
   background: #1e1e2e;
   padding: 12px 15px 15px;
   border-top: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;
+}
+
+/* 현재 인식 중인 텍스트 */
+.current-transcript {
+  background: rgba(74,222,128,0.15);
+  border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 12px;
+  padding: 10px 15px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #4ade80;
+  animation: transcriptPulse 1.5s infinite;
+}
+
+@keyframes transcriptPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .quick-btns {
@@ -421,7 +438,7 @@
   transform: scale(0.9);
 }
 
-/* 타임라인 - 입력창 바로 아래 */
+/* 타임라인 */
 .timeline {
   background: #16161f;
   border-top: 1px solid rgba(255,255,255,0.05);
@@ -674,8 +691,9 @@
     padding: 10px 12px 12px;
   }
   
-  .tl-content {
-    max-height: 100px;
+  .current-transcript {
+    font-size: 13px;
+    padding: 8px 12px;
   }
 }
 
