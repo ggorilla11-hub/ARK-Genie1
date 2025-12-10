@@ -1,30 +1,37 @@
-/* AgentPage.css - 보이스 모드 개선 */
+/* AgentPage.css - ARK-Genie AI지니 */
 
 .agent-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  background: linear-gradient(180deg, #1a1a2e, #252536);
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
   color: white;
-  font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   overflow: hidden;
 }
 
 /* 헤더 */
 .agent-header {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 50px 20px 20px;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 15px;
   flex-shrink: 0;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
 }
 
-.avatar {
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
   width: 50px;
   height: 50px;
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -32,92 +39,159 @@
   font-size: 28px;
 }
 
-.header-info {
-  flex: 1;
-}
-
 .header-info h1 {
-  color: white;
   font-size: 22px;
+  font-weight: 700;
   margin: 0;
-}
-
-.header-info p {
-  color: rgba(255,255,255,0.8);
-  font-size: 12px;
-  margin: 4px 0 0 0;
-}
-
-.status {
-  padding: 10px 20px;
-  background: rgba(255,255,255,0.2);
-  border: none;
-  border-radius: 25px;
   color: white;
-  font-size: 14px;
-  font-weight: 600;
 }
 
-.status.listening {
+.header-subtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.status-badge {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+}
+
+.status-badge.voice-mode {
   background: #4ade80;
+  color: #1a1a2e;
   animation: pulse 1.5s infinite;
 }
 
-.status.processing {
-  background: #fbbf24;
-}
-
-.status.calling {
-  background: #ef4444;
+.status-badge.oncall {
+  background: #f43f5e;
   animation: pulse 1s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.4); }
-  50% { box-shadow: 0 0 0 12px transparent; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.02); }
+}
+
+/* 통화 배너 */
+.call-banner {
+  background: linear-gradient(135deg, #f43f5e, #ec4899);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.call-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.call-icon {
+  font-size: 20px;
+}
+
+.end-call-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 보이스 배너 */
+.voice-banner {
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  animation: slideDown 0.3s ease;
+}
+
+.voice-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.voice-icon {
+  font-size: 20px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.stop-voice-btn {
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: #1a1a2e;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* 채팅 영역 */
 .chat-area {
   flex: 1;
-  padding: 15px;
   overflow-y: auto;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 /* 환영 메시지 */
-.welcome {
-  background: rgba(102,126,234,0.1);
-  border-radius: 20px;
-  padding: 40px 25px;
+.welcome-message {
   text-align: center;
-  border: 1px solid rgba(102,126,234,0.2);
+  padding: 60px 20px;
   margin: auto;
 }
 
 .welcome-icon {
-  font-size: 60px;
-  margin-bottom: 15px;
+  font-size: 80px;
+  margin-bottom: 20px;
+  animation: float 3s ease-in-out infinite;
 }
 
-.welcome h2 {
-  color: white;
-  font-size: 20px;
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.welcome-message h2 {
+  font-size: 24px;
   margin-bottom: 10px;
+  color: white;
 }
 
-.welcome p {
-  color: rgba(255,255,255,0.6);
-  font-size: 14px;
-  line-height: 1.6;
+.welcome-message p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
 }
 
 /* 메시지 */
 .message {
   display: flex;
-  gap: 10px;
   max-width: 85%;
   animation: fadeIn 0.3s ease;
 }
@@ -129,533 +203,134 @@
 
 .message.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
 }
 
-.message.bot {
+.message.ai {
   align-self: flex-start;
 }
 
-.msg-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.bubble {
-  padding: 12px 16px;
-  border-radius: 18px;
-  font-size: 14px;
+.message-content {
+  padding: 14px 18px;
+  border-radius: 20px;
+  font-size: 15px;
   line-height: 1.5;
 }
 
-.message.user .bubble {
+.message.user .message-content {
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
-  border-bottom-right-radius: 5px;
+  border-bottom-right-radius: 6px;
 }
 
-.message.bot .bubble {
-  background: rgba(255,255,255,0.08);
+.message.ai .message-content {
+  background: rgba(255, 255, 255, 0.1);
   color: white;
-  border-bottom-left-radius: 5px;
+  border-bottom-left-radius: 6px;
 }
 
-.bubble .time {
+.message-time {
   display: block;
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
-  margin-top: 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 6px;
 }
 
-/* 타이핑 표시 */
-.typing {
+/* 퀵 액션 */
+.quick-actions {
   display: flex;
   gap: 10px;
-  align-self: flex-start;
-}
-
-.dots {
-  background: rgba(255,255,255,0.08);
-  padding: 12px 18px;
-  border-radius: 18px;
-  display: flex;
-  gap: 5px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  background: rgba(255,255,255,0.5);
-  border-radius: 50%;
-  animation: bounce 1.4s infinite;
-}
-
-.dot:nth-child(2) { animation-delay: 0.2s; }
-.dot:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-5px); }
-}
-
-/* 상태 카드 */
-.status-card {
-  margin: 8px 0 8px 42px;
-}
-
-.card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.card-head {
-  padding: 12px 15px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.card-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
+  padding: 12px 20px;
   justify-content: center;
-  font-size: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.card-icon.call { background: rgba(239,68,68,0.2); }
-.card-icon.kakao { background: rgba(254,229,0,0.2); }
-.card-icon.sms { background: rgba(59,130,246,0.2); }
-.card-icon.email { background: rgba(168,85,247,0.2); }
-.card-icon.sheet { background: rgba(34,197,94,0.2); }
-.card-icon.calendar { background: rgba(59,130,246,0.2); }
-
-.card-title {
-  flex: 1;
-}
-
-.card-title h4 {
-  font-size: 13px;
-  color: white;
-  margin: 0 0 2px 0;
-}
-
-.card-title span {
-  font-size: 11px;
-  color: rgba(255,255,255,0.5);
-}
-
-.card-status {
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  background: rgba(74,222,128,0.2);
-  color: #4ade80;
-}
-
-.card-body {
-  padding: 12px 15px;
-}
-
-.card-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  font-size: 12px;
-}
-
-.card-row .l {
-  color: rgba(255,255,255,0.5);
-}
-
-.card-row .v {
-  color: white;
-}
-
-.card-btns {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.card-btn {
-  flex: 1;
-  padding: 10px;
+.quick-actions button {
+  padding: 10px 20px;
+  border-radius: 20px;
   border: none;
-  border-radius: 10px;
-  font-size: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-.card-btn.pri {
-  background: #667eea;
-  color: white;
+.quick-actions button:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.card-btn.sec {
-  background: rgba(255,255,255,0.1);
-  color: white;
-}
-
-/* 캘린더 이벤트 */
-.calendar-event {
-  background: rgba(59,130,246,0.1);
-  border-left: 3px solid #3b82f6;
-  padding: 10px 12px;
-  border-radius: 0 8px 8px 0;
-}
-
-.cal-date {
-  font-size: 13px;
-  font-weight: 700;
-  color: #60a5fa;
-  margin-bottom: 4px;
-}
-
-.cal-title {
-  font-size: 13px;
-  color: white;
+.quick-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* 입력 영역 */
 .input-area {
-  background: #1e1e2e;
-  padding: 12px 15px 15px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  gap: 10px;
+  padding: 15px 20px 30px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+.voice-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  font-size: 22px;
+  cursor: pointer;
+  transition: all 0.2s;
   flex-shrink: 0;
 }
 
-/* 현재 인식 중인 텍스트 */
-.current-transcript {
-  background: rgba(74,222,128,0.15);
-  border: 1px solid rgba(74,222,128,0.3);
-  border-radius: 12px;
-  padding: 10px 15px;
-  margin-bottom: 12px;
-  font-size: 14px;
-  color: #4ade80;
-  animation: transcriptPulse 1.5s infinite;
+.voice-btn:hover {
+  transform: scale(1.05);
 }
 
-@keyframes transcriptPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.quick-btns {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  justify-content: center;
-}
-
-.btn {
-  flex: 1;
-  max-width: 70px;
-  height: 55px;
-  border-radius: 14px;
-  border: none;
-  background: rgba(255,255,255,0.08);
-  color: white;
-  font-size: 20px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  transition: all 0.2s;
-}
-
-.btn:active {
-  transform: scale(0.95);
-}
-
-.btn span {
-  font-size: 9px;
-  opacity: 0.7;
-}
-
-.btn.voice {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  max-width: 80px;
-}
-
-.btn.voice.active {
-  background: #ef4444;
+.voice-btn.active {
+  background: #f43f5e;
   animation: pulse 1s infinite;
 }
 
-.input-row {
-  display: flex;
-  gap: 10px;
-}
-
-.input-row input {
+.input-area input {
   flex: 1;
   padding: 14px 20px;
-  border: none;
   border-radius: 25px;
-  background: rgba(255,255,255,0.08);
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
   color: white;
-  font-size: 14px;
+  font-size: 15px;
 }
 
-.input-row input::placeholder {
-  color: rgba(255,255,255,0.4);
+.input-area input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.input-row input:focus {
+.input-area input:focus {
   outline: none;
-  background: rgba(255,255,255,0.12);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .send-btn {
-  width: 48px;
-  height: 48px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
   font-size: 18px;
   cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.send-btn:active {
-  transform: scale(0.9);
-}
-
-/* 타임라인 */
-.timeline {
-  background: #16161f;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  transition: all 0.2s;
   flex-shrink: 0;
 }
 
-.tl-head {
-  padding: 10px 18px;
-  display: flex;
-  justify-content: space-between;
-  cursor: pointer;
-}
-
-.tl-title {
-  color: rgba(255,255,255,0.7);
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tl-badge {
-  background: #667eea;
-  color: white;
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.tl-toggle {
-  color: rgba(255,255,255,0.4);
-  font-size: 11px;
-  transition: transform 0.3s;
-}
-
-.timeline.open .tl-toggle {
-  transform: rotate(180deg);
-}
-
-.tl-content {
-  padding: 0 18px 12px;
-  max-height: 120px;
-  overflow-y: auto;
-  display: none;
-}
-
-.timeline.open .tl-content {
-  display: block;
-}
-
-.tl-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
-  font-size: 12px;
-  color: rgba(255,255,255,0.7);
-}
-
-.tl-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: rgba(102,126,234,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-}
-
-.tl-text {
-  flex: 1;
-}
-
-.tl-status.done {
-  color: #4ade80;
-}
-
-.tl-status.loading {
-  color: #fbbf24;
-  animation: blink 1s infinite;
-}
-
-@keyframes blink {
-  50% { opacity: 0.3; }
-}
-
-/* 통화 팝업 */
-.call-popup {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.9);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.call-popup-box {
-  background: #1e1e2e;
-  border-radius: 24px;
-  width: 100%;
-  max-width: 360px;
-  padding: 30px 20px;
-}
-
-.call-info {
-  text-align: center;
-}
-
-.call-avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
-  margin: 0 auto 15px;
-}
-
-.call-name {
-  font-size: 24px;
-  color: white;
-  margin-bottom: 5px;
-}
-
-.call-phone {
-  font-size: 14px;
-  color: rgba(255,255,255,0.5);
-}
-
-.call-state {
-  font-size: 14px;
-  color: #4ade80;
-  margin-top: 10px;
-}
-
-.call-timer {
-  font-size: 36px;
-  color: white;
-  margin: 15px 0;
-  font-family: 'SF Mono', monospace;
-}
-
-.call-transcript {
-  background: rgba(255,255,255,0.05);
-  border-radius: 12px;
-  padding: 15px;
-  max-height: 200px;
-  overflow-y: auto;
-  margin-top: 20px;
-}
-
-.transcript-title {
-  font-size: 12px;
-  color: rgba(255,255,255,0.5);
-  margin-bottom: 10px;
-}
-
-.tr-line {
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.tr-speaker {
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.tr-speaker.genie {
-  color: #a5b4fc;
-}
-
-.tr-speaker.customer {
-  color: #4ade80;
-}
-
-.tr-text {
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  line-height: 1.5;
-}
-
-.call-btns {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  margin-top: 25px;
-}
-
-.call-btn {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.call-btn:active {
-  transform: scale(0.9);
-}
-
-.call-btn.end {
-  background: #ef4444;
-  color: white;
-}
-
-.call-btn.mute {
-  background: rgba(255,255,255,0.1);
-  color: white;
+.send-btn:hover {
+  transform: scale(1.05);
 }
 
 /* 모바일 최적화 */
@@ -668,32 +343,21 @@
     font-size: 18px;
   }
   
-  .status {
-    padding: 8px 15px;
-    font-size: 12px;
+  .chat-area {
+    padding: 15px;
   }
   
-  .btn {
-    max-width: 60px;
-    height: 50px;
-    font-size: 18px;
-  }
-  
-  .btn span {
-    font-size: 8px;
-  }
-  
-  .btn.voice {
-    max-width: 70px;
+  .message {
+    max-width: 90%;
   }
   
   .input-area {
-    padding: 10px 12px 12px;
+    padding: 12px 15px 25px;
   }
   
-  .current-transcript {
-    font-size: 13px;
-    padding: 8px 12px;
+  .voice-btn, .send-btn {
+    width: 46px;
+    height: 46px;
   }
 }
 
@@ -702,7 +366,7 @@
   .agent-page {
     max-width: 500px;
     margin: 0 auto;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    border-right: 1px solid rgba(255,255,255,0.1);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
