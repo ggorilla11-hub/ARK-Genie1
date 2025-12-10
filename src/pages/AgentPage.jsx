@@ -11,7 +11,6 @@ function AgentPage() {
   const [status, setStatus] = useState('대기중');
   const [currentCall, setCurrentCall] = useState(null);
   const [callDuration, setCallDuration] = useState(0);
-  const [currentTranscript, setCurrentTranscript] = useState('');
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -21,6 +20,7 @@ function AgentPage() {
   const callTimerRef = useRef(null);
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
+  const isConnectedRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -31,7 +31,7 @@ function AgentPage() {
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     return () => {
-      stopVoiceMode();
+      cleanupVoiceMode();
       if (callTimerRef.current) clearInterval(callTimerRef.current);
     };
   }, []);
@@ -43,6 +43,45 @@ function AgentPage() {
       isUser,
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
     }]);
+  };
+
+  // 신호음 재생 (마이크 연결 알림)
+  const playBeep = (type = 'start') => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      if (type === 'start') {
+        // 시작음: 높은 음 두 번
+        oscillator.frequency.value = 800;
+        gainNode.gain.value = 0.3;
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+        
+        setTimeout(() => {
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          osc2.frequency.value = 1000;
+          gain2.gain.value = 0.3;
+          osc2.start();
+          osc2.stop(audioCtx.currentTime + 0.15);
+        }, 150);
+      } else {
+        // 종료음: 낮은 음 한 번
+        oscillator.frequency.value = 400;
+        gainNode.gain.value = 0.3;
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.2);
+      }
+    } catch (e) {
+      console.log('신호음 재생 실패:', e);
+    }
   };
 
   // Base64 오디오 재생
@@ -63,8 +102,12 @@ function AgentPage() {
     const base64Audio = audioQueueRef.current.shift();
     
     try {
-      if (!audioContextRef.current) {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      }
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
       }
       
       const audioData = atob(base64Audio);
@@ -95,8 +138,48 @@ function AgentPage() {
     }
   };
 
+  // 정리 함수
+  const cleanupVoiceMode = () => {
+    // WebSocket 종료
+    if (wsRef.current) {
+      try {
+        wsRef.current.send(JSON.stringify({ type: 'stop' }));
+        wsRef.current.close();
+      } catch (e) {}
+      wsRef.current = null;
+    }
+    
+    // 마이크 종료
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    
+    // 오디오 프로세서 종료
+    if (processorRef.current) {
+      try {
+        const { processor, source, audioContext } = processorRef.current;
+        processor.disconnect();
+        source.disconnect();
+        audioContext.close();
+      } catch (e) {}
+      processorRef.current = null;
+    }
+    
+    // 오디오 큐 초기화
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    isConnectedRef.current = false;
+  };
+
   // WebSocket 연결 및 Realtime API 시작
   const startVoiceMode = async () => {
+    // 이미 연결 중이면 무시
+    if (isConnectedRef.current) {
+      console.log('이미 연결됨');
+      return;
+    }
+    
     try {
       setStatus('연결중...');
       setIsVoiceMode(true);
@@ -119,29 +202,34 @@ function AgentPage() {
       ws.onopen = () => {
         console.log('✅ WebSocket 연결됨');
         ws.send(JSON.stringify({ type: 'start_app' }));
-        setStatus('듣는중...');
-        startAudioCapture(stream, ws);
       };
       
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           
+          // 세션 시작됨 - 마이크 연결 신호음
+          if (msg.type === 'session_started') {
+            console.log('✅ 세션 시작됨');
+            isConnectedRef.current = true;
+            setStatus('듣는중...');
+            playBeep('start');
+            startAudioCapture(stream, ws);
+          }
+          
           // 오디오 수신
           if (msg.type === 'audio' && msg.data) {
             playAudio(msg.data);
           }
           
-          // 지니 응답 텍스트
-          if (msg.type === 'transcript' && msg.role === 'assistant') {
-            addMessage(msg.text, false);
-            setCurrentTranscript('');
-          }
-          
-          // 사용자 음성 텍스트
+          // 사용자 음성 텍스트 (먼저 표시)
           if (msg.type === 'transcript' && msg.role === 'user') {
             addMessage(msg.text, true);
-            setCurrentTranscript('');
+          }
+          
+          // 지니 응답 텍스트 (나중에 표시)
+          if (msg.type === 'transcript' && msg.role === 'assistant') {
+            addMessage(msg.text, false);
             
             // 전화 명령 감지
             checkCallCommand(msg.text);
@@ -153,6 +241,17 @@ function AgentPage() {
             isPlayingRef.current = false;
           }
           
+          // 에러
+          if (msg.type === 'error') {
+            console.error('서버 에러:', msg.error);
+            addMessage('⚠️ 연결 오류가 발생했습니다.', false);
+          }
+          
+          // OpenAI 연결 종료
+          if (msg.type === 'openai_closed') {
+            console.log('OpenAI 연결 종료됨');
+          }
+          
         } catch (e) {
           console.error('메시지 파싱 에러:', e);
         }
@@ -161,10 +260,13 @@ function AgentPage() {
       ws.onerror = (error) => {
         console.error('❌ WebSocket 에러:', error);
         setStatus('연결 실패');
+        cleanupVoiceMode();
+        setIsVoiceMode(false);
       };
       
       ws.onclose = () => {
         console.log('🔌 WebSocket 종료');
+        isConnectedRef.current = false;
         if (isVoiceMode) {
           setStatus('대기중');
           setIsVoiceMode(false);
@@ -174,6 +276,7 @@ function AgentPage() {
     } catch (error) {
       console.error('마이크 에러:', error);
       alert('마이크 권한이 필요합니다.');
+      cleanupVoiceMode();
       setIsVoiceMode(false);
       setStatus('대기중');
     }
@@ -181,87 +284,59 @@ function AgentPage() {
 
   // 마이크 오디오 캡처 및 전송
   const startAudioCapture = (stream, ws) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-    const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    
-    processor.onaudioprocess = (e) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
       
-      const inputData = e.inputBuffer.getChannelData(0);
-      const pcm16 = new Int16Array(inputData.length);
-      for (let i = 0; i < inputData.length; i++) {
-        pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
-      }
+      processor.onaudioprocess = (e) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        
+        const inputData = e.inputBuffer.getChannelData(0);
+        const pcm16 = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+        }
+        
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+        ws.send(JSON.stringify({ type: 'audio', data: base64 }));
+      };
       
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-      ws.send(JSON.stringify({ type: 'audio', data: base64 }));
-    };
-    
-    source.connect(processor);
-    processor.connect(audioContext.destination);
-    processorRef.current = { processor, source, audioContext };
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      processorRef.current = { processor, source, audioContext };
+    } catch (e) {
+      console.error('오디오 캡처 에러:', e);
+    }
   };
 
-  // 전화 명령 감지
+  // 전화 명령 감지 (지니 응답에서)
   const checkCallCommand = (text) => {
-    if (text.includes('전화') || text.includes('콜') || text.includes('통화')) {
-      const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
-      const namePatterns = [
-        /([가-힣]{2,4})\s*(교수|선생|님|씨|고객|대표|사장|부장|과장|차장|팀장)?/,
-        /([가-힣]{2,4})(에게|한테|께)/
-      ];
-      
-      let name = '';
-      for (const pattern of namePatterns) {
-        const match = text.match(pattern);
-        if (match && !['전화', '통화', '연결', '고객'].includes(match[1])) {
-          name = match[1];
-          break;
+    if (text.includes('전화합니다') || text.includes('전화하겠습니다') || text.includes('전화 연결')) {
+      // 전화번호와 이름 추출은 이전 사용자 메시지에서
+      const lastUserMsg = messages.filter(m => m.isUser).pop();
+      if (lastUserMsg) {
+        const phoneMatch = lastUserMsg.text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
+        const nameMatch = lastUserMsg.text.match(/([가-힣]{2,4})\s*(교수|선생|님|씨|고객|대표)?/);
+        
+        if (phoneMatch) {
+          const phone = phoneMatch[0];
+          const name = nameMatch ? nameMatch[1] : '고객';
+          
+          setTimeout(() => {
+            makeCall(name, phone);
+          }, 2000);
         }
-      }
-      
-      const phone = phoneMatch ? phoneMatch[0] : '';
-      
-      if (phone) {
-        setTimeout(() => {
-          makeCall(name || '고객', phone);
-        }, 2000);
       }
     }
   };
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
-    // WebSocket 종료
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: 'stop' }));
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    
-    // 마이크 종료
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-    
-    // 오디오 프로세서 종료
-    if (processorRef.current) {
-      const { processor, source, audioContext } = processorRef.current;
-      processor.disconnect();
-      source.disconnect();
-      audioContext.close();
-      processorRef.current = null;
-    }
-    
-    // 오디오 큐 초기화
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
-    
+    playBeep('stop');
+    cleanupVoiceMode();
     setIsVoiceMode(false);
     setStatus('대기중');
-    setCurrentTranscript('');
   };
 
   // 전화 걸기
@@ -303,6 +378,7 @@ function AgentPage() {
 
   // 전화 종료
   const endCall = () => {
+    // 타이머 정리
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
@@ -311,9 +387,14 @@ function AgentPage() {
     const name = currentCall?.name || '고객';
     const duration = formatDuration(callDuration);
     
+    // 상태 완전 초기화
     setCurrentCall(null);
     setCallDuration(0);
     setStatus('대기중');
+    setIsVoiceMode(false);
+    
+    // 정리
+    cleanupVoiceMode();
     
     addMessage(`📴 ${name}님 통화 종료 (${duration})`, false);
   };
@@ -390,7 +471,7 @@ function AgentPage() {
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
             <p>🎙️ 버튼 누르고 자유롭게 말씀하세요.</p>
-            <p className="welcome-hint">말 끝나면 지니가 바로 응답해요</p>
+            <p className="welcome-hint">"삐삐" 소리 나면 말씀하세요</p>
           </div>
         ) : (
           messages.map((msg) => (
