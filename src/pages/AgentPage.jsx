@@ -19,6 +19,7 @@ function AgentPage() {
   const isProcessingRef = useRef(false);
   const callTimerRef = useRef(null);
   const silenceTimerRef = useRef(null);
+  const lastTranscriptRef = useRef('');
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -45,7 +46,7 @@ function AgentPage() {
   };
 
   // 지니 음성 응답
-  const speakGenie = (text, isFirstResponse = false) => {
+  const speakGenie = (text, isQuickResponse = false) => {
     return new Promise((resolve) => {
       isSpeakingRef.current = true;
       if (recognitionRef.current) {
@@ -66,8 +67,7 @@ function AgentPage() {
       utterance.onend = () => {
         isSpeakingRef.current = false;
         isProcessingRef.current = false;
-        // 첫 응답은 바로, 나머지는 1초 후
-        const delay = isFirstResponse ? 300 : 1000;
+        const delay = isQuickResponse ? 300 : 1000;
         setTimeout(() => {
           if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
             startRecognition();
@@ -106,7 +106,7 @@ function AgentPage() {
     }
   };
 
-  // 음성 인식 시작
+  // 음성 인식 시작 (긴 말 끝까지 듣기)
   const startRecognition = () => {
     if (isSpeakingRef.current || isProcessingRef.current) {
       setTimeout(() => {
@@ -126,35 +126,41 @@ function AgentPage() {
     const recognition = new SpeechRecognition();
     
     recognition.lang = 'ko-KR';
-    recognition.continuous = false;  // 한 문장씩
+    recognition.continuous = true;  // 계속 듣기
     recognition.interimResults = true;
 
     recognition.onstart = () => {
       setStatus('듣는중...');
+      lastTranscriptRef.current = '';
       setCurrentTranscript('');
     };
 
     recognition.onresult = (event) => {
       if (isSpeakingRef.current || isProcessingRef.current) return;
       
-      let finalTranscript = '';
-      let interimTranscript = '';
+      let currentText = '';
       
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript = transcript;
-        } else {
-          interimTranscript = transcript;
+      for (let i = 0; i < event.results.length; i++) {
+        currentText += event.results[i][0].transcript;
+      }
+      
+      setCurrentTranscript(currentText);
+      lastTranscriptRef.current = currentText;
+      
+      // 무음 타이머 리셋
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+      }
+      
+      // 2초 무음 후 처리
+      silenceTimerRef.current = setTimeout(() => {
+        const finalText = lastTranscriptRef.current.trim();
+        if (finalText && voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
+          lastTranscriptRef.current = '';
+          setCurrentTranscript('');
+          processUserMessage(finalText);
         }
-      }
-      
-      setCurrentTranscript(interimTranscript || finalTranscript);
-      
-      if (finalTranscript) {
-        setCurrentTranscript('');
-        processUserMessage(finalTranscript.trim());
-      }
+      }, 2000);
     };
 
     recognition.onerror = (event) => {
@@ -192,22 +198,23 @@ function AgentPage() {
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch(e) {}
     }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
     
     addMessage(text, true);
     setStatus('생각중...');
     
-    // "지니야" 호출 감지 (지니, 진희, 진이 등 유사 발음 포함)
+    // "지니야" 호출 감지
     const isGenieCall = /지니|진희|진이|지은|지연/.test(text);
     const cleanText = text.replace(/지니야?|진희야?|진이야?|지은아?|지연아?/g, '').trim();
     
     if (isGenieCall && cleanText.length < 5) {
-      // "지니야"만 부른 경우 - 즉각 짧은 응답
       addMessage('네, 대표님!', false);
       await speakGenie('네, 대표님!', true);
       return;
     }
     
-    // 명령어가 포함된 경우
     const commandText = cleanText.length >= 5 ? cleanText : text;
     
     // 전화 요청 감지
@@ -241,15 +248,13 @@ function AgentPage() {
         await speakGenie(askPhone, true);
         return;
       } else if (phone) {
-        const confirmMsg = `네, 전화합니다.`;
-        addMessage(confirmMsg, false);
-        await speakGenie(confirmMsg);
+        addMessage('네, 전화합니다.', false);
+        await speakGenie('네, 전화합니다.');
         await makeCall('고객', phone);
         return;
       } else {
-        const askInfo = '누구에게 전화할까요?';
-        addMessage(askInfo, false);
-        await speakGenie(askInfo, true);
+        addMessage('누구에게 전화할까요?', false);
+        await speakGenie('누구에게 전화할까요?', true);
         return;
       }
     }
@@ -265,6 +270,7 @@ function AgentPage() {
     voiceModeRef.current = true;
     isSpeakingRef.current = false;
     isProcessingRef.current = false;
+    lastTranscriptRef.current = '';
     setCurrentTranscript('');
     setIsVoiceMode(true);
     setStatus('듣는중...');
@@ -276,6 +282,7 @@ function AgentPage() {
     voiceModeRef.current = false;
     isSpeakingRef.current = false;
     isProcessingRef.current = false;
+    lastTranscriptRef.current = '';
     setCurrentTranscript('');
     setIsVoiceMode(false);
     setStatus('대기중');
