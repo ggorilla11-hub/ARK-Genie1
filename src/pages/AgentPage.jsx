@@ -17,10 +17,12 @@ function AgentPage() {
   const callTimerRef = useRef(null);
   const chatEndRef = useRef(null);
   const isProcessingRef = useRef(false);
-  const finalTranscriptRef = useRef('');
+  const accumulatedTextRef = useRef(''); // 누적 텍스트
   const silenceTimerRef = useRef(null);
+  const isListeningRef = useRef(false);
   
   const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
+  const SILENCE_TIMEOUT = 2500; // 2.5초 무음 후 처리 (길게 설정)
 
   // 메시지 추가
   const addMessage = (text, isUser = false, card = null) => {
@@ -34,7 +36,7 @@ function AgentPage() {
     setTimeline(prev => [...prev, { id: Date.now(), icon, text, status: tlStatus }]);
   };
 
-  // TTS 음성 출력 (안정화)
+  // TTS 음성 출력
   const speak = (text) => {
     return new Promise((resolve) => {
       if ('speechSynthesis' in window) {
@@ -60,16 +62,18 @@ function AgentPage() {
     });
   };
 
-  // 음성 인식 초기화 (단순화 - 띵띵 소리 제거)
+  // 음성 인식 초기화
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false; // 단일 인식 모드
+      recognitionRef.current.continuous = true; // 계속 듣기
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'ko-KR';
 
       recognitionRef.current.onresult = (event) => {
+        if (isProcessingRef.current) return;
+        
         let interimTranscript = '';
         let finalTranscript = '';
 
@@ -82,50 +86,57 @@ function AgentPage() {
           }
         }
 
-        if (interimTranscript) {
-          setCurrentTranscript(interimTranscript);
+        // 최종 인식된 텍스트 누적
+        if (finalTranscript) {
+          accumulatedTextRef.current += ' ' + finalTranscript;
+          accumulatedTextRef.current = accumulatedTextRef.current.trim();
         }
 
-        if (finalTranscript) {
-          finalTranscriptRef.current = finalTranscript;
-          setCurrentTranscript(finalTranscript);
+        // 화면에 표시 (누적 + 현재 인식중)
+        const displayText = (accumulatedTextRef.current + ' ' + interimTranscript).trim();
+        if (displayText) {
+          setCurrentTranscript(displayText);
         }
+
+        // 무음 타이머 리셋 - 말할 때마다 타이머 재시작
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current);
+        }
+
+        // 2.5초 동안 추가 입력 없으면 처리 시작
+        silenceTimerRef.current = setTimeout(() => {
+          const fullText = accumulatedTextRef.current.trim();
+          if (fullText && isListeningRef.current && !isProcessingRef.current) {
+            processUserInput(fullText);
+            accumulatedTextRef.current = '';
+          }
+        }, SILENCE_TIMEOUT);
       };
 
       recognitionRef.current.onend = () => {
-        // 인식 종료시 최종 텍스트 처리
-        if (finalTranscriptRef.current && !isProcessingRef.current) {
-          const text = finalTranscriptRef.current.trim();
-          finalTranscriptRef.current = '';
-          
-          if (text) {
-            processUserInput(text);
-          } else if (isListening) {
-            // 텍스트 없으면 다시 시작 (3초 대기)
-            setTimeout(() => {
-              if (isListening && !isProcessingRef.current) {
-                startRecognition();
-              }
-            }, 1000);
-          }
-        } else if (isListening && !isProcessingRef.current) {
-          // 다시 듣기 시작
+        // 보이스 모드 중이면 다시 시작 (조용히)
+        if (isListeningRef.current && !isProcessingRef.current) {
           setTimeout(() => {
-            if (isListening && !isProcessingRef.current) {
-              startRecognition();
+            if (isListeningRef.current && !isProcessingRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch (e) {}
             }
-          }, 1000);
+          }, 300);
         }
       };
 
       recognitionRef.current.onerror = (event) => {
         console.log('음성 인식 오류:', event.error);
-        if (event.error !== 'aborted' && isListening && !isProcessingRef.current) {
+        // 보이스 모드 중이면 다시 시작
+        if (isListeningRef.current && !isProcessingRef.current && event.error !== 'aborted') {
           setTimeout(() => {
-            if (isListening && !isProcessingRef.current) {
-              startRecognition();
+            if (isListeningRef.current && !isProcessingRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch (e) {}
             }
-          }, 2000);
+          }, 1000);
         }
       };
     }
@@ -139,46 +150,49 @@ function AgentPage() {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
-  }, [isListening]);
+  }, []);
 
   // 채팅 스크롤
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // 음성 인식 시작 (안정화)
-  const startRecognition = () => {
-    if (recognitionRef.current && !isProcessingRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        // 이미 시작된 경우 무시
-      }
-    }
-  };
-
   // 보이스 모드 시작
   const startVoiceMode = async () => {
+    isListeningRef.current = true;
+    isProcessingRef.current = false;
+    accumulatedTextRef.current = '';
+    
     setIsListening(true);
     setStatus('듣는중');
     setCurrentTranscript('');
-    finalTranscriptRef.current = '';
     
     // 시작 알림
     await speak('네, 말씀하세요.');
     
     // 음성 인식 시작
     setTimeout(() => {
-      startRecognition();
-    }, 500);
+      if (recognitionRef.current && isListeningRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {}
+      }
+    }, 300);
   };
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
+    isListeningRef.current = false;
+    isProcessingRef.current = false;
+    accumulatedTextRef.current = '';
+    
     setIsListening(false);
     setStatus('대기중');
     setCurrentTranscript('');
-    finalTranscriptRef.current = '';
+    
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
     
     if (recognitionRef.current) {
       try {
@@ -206,21 +220,21 @@ function AgentPage() {
     setCurrentTranscript('');
     setIsTyping(true);
 
-    // 간단한 키워드 분석
+    // 키워드 분석
     const lowerText = text.toLowerCase();
     
     // 전화 요청 감지
     if (lowerText.includes('전화') || lowerText.includes('콜') || lowerText.includes('통화')) {
       // 전화번호 추출
       const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
-      // 이름 추출 (간단한 패턴)
-      const nameMatch = text.match(/([가-힣]{2,4})(에게|한테|님|께|교수|선생|고객)/);
+      // 이름 추출
+      const nameMatch = text.match(/([가-힣]{2,4})\s*(에게|한테|님|께|교수|선생|고객|씨)?/);
       
       const phone = phoneMatch ? phoneMatch[0] : '';
       const name = nameMatch ? nameMatch[1] : '';
       
       if (phone || name) {
-        await confirmAndCall(name || '고객', phone);
+        await executeCallDirect(name || '고객', phone);
       } else {
         setIsTyping(false);
         const reply = '어느 분께 전화할까요? 이름이나 전화번호를 알려주세요.';
@@ -261,40 +275,26 @@ function AgentPage() {
     finishProcessing();
   };
 
-  // 전화 확인 및 실행
-  const confirmAndCall = async (name, phone) => {
+  // 전화 바로 실행 (복명복창 후 바로 전화)
+  const executeCallDirect = async (name, phone) => {
     setIsTyping(false);
     
+    // 복명복창
     const confirmMsg = phone 
-      ? `${name}님 (${phone})께 전화할까요?`
-      : `${name}님께 전화할까요?`;
+      ? `네, ${name}님(${phone})께 바로 전화하겠습니다.`
+      : `네, ${name}님께 바로 전화하겠습니다.`;
     
     addMessage(confirmMsg, false);
     await speak(confirmMsg);
     
-    // 확인 대기 (음성으로)
-    isProcessingRef.current = false;
-    setStatus('듣는중');
+    if (!phone) {
+      addMessage('전화번호를 알려주세요.', false);
+      await speak('전화번호를 알려주세요.');
+      finishProcessing();
+      return;
+    }
     
-    // 임시로 바로 전화 실행 (데모용)
-    setTimeout(async () => {
-      if (phone) {
-        await executeCall(name, phone);
-      } else {
-        addMessage('전화번호를 알려주세요.', false);
-        await speak('전화번호를 알려주세요.');
-        finishProcessing();
-      }
-    }, 3000);
-  };
-
-  // 전화 실행
-  const executeCall = async (name, phone) => {
-    isProcessingRef.current = true;
-    
-    addMessage(`네, ${name}님께 전화 연결할게요.`, false);
-    await speak(`네, ${name}님께 전화 연결합니다.`);
-    
+    // 전화 실행
     addTimeline('📞', `${name}님께 전화 연결 중`, 'loading');
     
     // 보이스 모드 끄기
@@ -355,15 +355,20 @@ function AgentPage() {
     setStatus('대기중');
   };
 
-  // 처리 완료
+  // 처리 완료 후 다시 듣기
   const finishProcessing = () => {
     isProcessingRef.current = false;
+    accumulatedTextRef.current = '';
     
-    if (isListening) {
+    if (isListeningRef.current) {
       setStatus('듣는중');
       setTimeout(() => {
-        startRecognition();
-      }, 1000);
+        if (isListeningRef.current && recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {}
+        }
+      }, 500);
     } else {
       setStatus('대기중');
     }
