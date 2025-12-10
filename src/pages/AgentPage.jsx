@@ -44,7 +44,7 @@ function AgentPage() {
     }]);
   };
 
-  // 지니 음성 응답 (성숙한 여성 목소리)
+  // 지니 음성 응답
   const speakGenie = (text) => {
     return new Promise((resolve) => {
       isSpeakingRef.current = true;
@@ -60,11 +60,8 @@ function AgentPage() {
       utterance.volume = 1.0;
       
       const voices = window.speechSynthesis.getVoices();
-      const koreanFemale = voices.find(v => 
-        v.lang.includes('ko') && (v.name.includes('Female') || v.name.includes('여'))
-      ) || voices.find(v => v.lang.includes('ko')) || voices[0];
-      
-      if (koreanFemale) utterance.voice = koreanFemale;
+      const koreanVoice = voices.find(v => v.lang.includes('ko')) || voices[0];
+      if (koreanVoice) utterance.voice = koreanVoice;
       
       utterance.onend = () => {
         isSpeakingRef.current = false;
@@ -73,7 +70,7 @@ function AgentPage() {
             startRecognition();
           }
           resolve();
-        }, 2000);
+        }, 1000);
       };
       utterance.onerror = () => {
         isSpeakingRef.current = false;
@@ -82,7 +79,7 @@ function AgentPage() {
             startRecognition();
           }
           resolve();
-        }, 2000);
+        }, 1000);
       };
       
       window.speechSynthesis.speak(utterance);
@@ -128,7 +125,6 @@ function AgentPage() {
 
     recognition.onstart = () => {
       setStatus('듣는중...');
-      transcriptRef.current = '';
     };
 
     recognition.onresult = (event) => {
@@ -160,9 +156,9 @@ function AgentPage() {
       silenceTimerRef.current = setTimeout(() => {
         const fullText = transcriptRef.current.trim();
         if (fullText && voiceModeRef.current && !isSpeakingRef.current) {
-          processUserMessage(fullText);
           transcriptRef.current = '';
           setCurrentTranscript('');
+          processUserMessage(fullText);
         }
       }, 2000);
     };
@@ -174,7 +170,7 @@ function AgentPage() {
           if (voiceModeRef.current && !isSpeakingRef.current) {
             startRecognition();
           }
-        }, 2000);
+        }, 1000);
       }
     };
 
@@ -203,15 +199,21 @@ function AgentPage() {
     addMessage(text, true);
     setStatus('생각중...');
     
-    // "지니야" 호출 감지 (지니야만 부른 경우)
-    if (text.includes('지니')) {
-      const withoutGenie = text.replace(/지니야?/g, '').trim();
-      if (withoutGenie.length < 5) {
+    // "지니야" 호출 감지
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('지니')) {
+      const cleanText = text.replace(/지니야?/g, '').trim();
+      
+      // "지니야"만 부른 경우
+      if (cleanText.length < 3) {
         const reply = '네, 대표님! 무엇을 도와드릴까요?';
         addMessage(reply, false);
         await speakGenie(reply);
         return;
       }
+      
+      // "지니야 + 명령" 인 경우 - 명령 처리
+      text = cleanText;
     }
     
     // 전화 요청 감지
@@ -350,14 +352,12 @@ function AgentPage() {
     await speakGenie(`${name}님과의 통화가 종료되었습니다.`);
   };
 
-  // 통화 시간 포맷
   const formatDuration = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}분 ${s}초`;
   };
 
-  // 텍스트 전송
   const handleSend = async () => {
     if (!inputText.trim()) return;
     const text = inputText;
