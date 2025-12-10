@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
 
 const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
+const WS_SERVER = 'wss://ark-genie-server.onrender.com';
 
 function AgentPage() {
   const [messages, setMessages] = useState([]);
@@ -13,13 +14,13 @@ function AgentPage() {
   const [currentTranscript, setCurrentTranscript] = useState('');
   
   const chatAreaRef = useRef(null);
-  const recognitionRef = useRef(null);
-  const voiceModeRef = useRef(false);
-  const isSpeakingRef = useRef(false);
-  const isProcessingRef = useRef(false);
+  const wsRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const processorRef = useRef(null);
   const callTimerRef = useRef(null);
-  const silenceTimerRef = useRef(null);
-  const lastTranscriptRef = useRef('');
+  const audioQueueRef = useRef([]);
+  const isPlayingRef = useRef(false);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -27,13 +28,12 @@ function AgentPage() {
     }
   }, [messages]);
 
+  // 컴포넌트 언마운트 시 정리
   useEffect(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
-    }
+    return () => {
+      stopVoiceMode();
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
   }, []);
 
   const addMessage = (text, isUser) => {
@@ -45,181 +45,168 @@ function AgentPage() {
     }]);
   };
 
-  // 지니 음성 응답
-  const speakGenie = (text, isQuickResponse = false) => {
-    return new Promise((resolve) => {
-      isSpeakingRef.current = true;
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch(e) {}
-      }
-      
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ko-KR';
-      utterance.rate = 0.95;
-      utterance.pitch = 0.9;
-      utterance.volume = 1.0;
-      
-      const voices = window.speechSynthesis.getVoices();
-      const koreanVoice = voices.find(v => v.lang.includes('ko')) || voices[0];
-      if (koreanVoice) utterance.voice = koreanVoice;
-      
-      utterance.onend = () => {
-        isSpeakingRef.current = false;
-        isProcessingRef.current = false;
-        const delay = isQuickResponse ? 300 : 1000;
-        setTimeout(() => {
-          if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            startRecognition();
-          }
-          resolve();
-        }, delay);
-      };
-      utterance.onerror = () => {
-        isSpeakingRef.current = false;
-        isProcessingRef.current = false;
-        setTimeout(() => {
-          if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            startRecognition();
-          }
-          resolve();
-        }, 500);
-      };
-      
-      window.speechSynthesis.speak(utterance);
-    });
+  // Base64 오디오 재생
+  const playAudio = async (base64Audio) => {
+    audioQueueRef.current.push(base64Audio);
+    if (!isPlayingRef.current) {
+      processAudioQueue();
+    }
   };
 
-  // GPT-4o 대화
-  const askGenie = async (userMessage) => {
+  const processAudioQueue = async () => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingRef.current = false;
+      return;
+    }
+    
+    isPlayingRef.current = true;
+    const base64Audio = audioQueueRef.current.shift();
+    
     try {
-      const response = await fetch(`${RENDER_SERVER}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage })
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      }
+      
+      const audioData = atob(base64Audio);
+      const arrayBuffer = new ArrayBuffer(audioData.length);
+      const view = new Uint8Array(arrayBuffer);
+      for (let i = 0; i < audioData.length; i++) {
+        view[i] = audioData.charCodeAt(i);
+      }
+      
+      // PCM16 to Float32
+      const pcm16 = new Int16Array(arrayBuffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / 32768;
+      }
+      
+      const audioBuffer = audioContextRef.current.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+      
+      const source = audioContextRef.current.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioContextRef.current.destination);
+      source.onended = () => processAudioQueue();
+      source.start();
+    } catch (e) {
+      console.error('오디오 재생 에러:', e);
+      processAudioQueue();
+    }
+  };
+
+  // WebSocket 연결 및 Realtime API 시작
+  const startVoiceMode = async () => {
+    try {
+      setStatus('연결중...');
+      setIsVoiceMode(true);
+      
+      // 마이크 권한 요청
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 24000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true
+        } 
       });
-      const data = await response.json();
-      return data.reply || '네, 대표님! 다시 말씀해주세요.';
+      mediaStreamRef.current = stream;
+      
+      // WebSocket 연결
+      const ws = new WebSocket(`${WS_SERVER}?mode=app`);
+      wsRef.current = ws;
+      
+      ws.onopen = () => {
+        console.log('✅ WebSocket 연결됨');
+        ws.send(JSON.stringify({ type: 'start_app' }));
+        setStatus('듣는중...');
+        startAudioCapture(stream, ws);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          
+          // 오디오 수신
+          if (msg.type === 'audio' && msg.data) {
+            playAudio(msg.data);
+          }
+          
+          // 지니 응답 텍스트
+          if (msg.type === 'transcript' && msg.role === 'assistant') {
+            addMessage(msg.text, false);
+            setCurrentTranscript('');
+          }
+          
+          // 사용자 음성 텍스트
+          if (msg.type === 'transcript' && msg.role === 'user') {
+            addMessage(msg.text, true);
+            setCurrentTranscript('');
+            
+            // 전화 명령 감지
+            checkCallCommand(msg.text);
+          }
+          
+          // AI 중단 (Barge-in)
+          if (msg.type === 'interrupt') {
+            audioQueueRef.current = [];
+            isPlayingRef.current = false;
+          }
+          
+        } catch (e) {
+          console.error('메시지 파싱 에러:', e);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('❌ WebSocket 에러:', error);
+        setStatus('연결 실패');
+      };
+      
+      ws.onclose = () => {
+        console.log('🔌 WebSocket 종료');
+        if (isVoiceMode) {
+          setStatus('대기중');
+          setIsVoiceMode(false);
+        }
+      };
+      
     } catch (error) {
-      console.error('GPT 에러:', error);
-      return '네, 대표님! 잠시 연결이 불안정합니다.';
+      console.error('마이크 에러:', error);
+      alert('마이크 권한이 필요합니다.');
+      setIsVoiceMode(false);
+      setStatus('대기중');
     }
   };
 
-  // 음성 인식 시작 (긴 말 끝까지 듣기)
-  const startRecognition = () => {
-    if (isSpeakingRef.current || isProcessingRef.current) {
-      setTimeout(() => {
-        if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-          startRecognition();
-        }
-      }, 500);
-      return;
-    }
-
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('음성 인식을 지원하지 않는 브라우저입니다.');
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
+  // 마이크 오디오 캡처 및 전송
+  const startAudioCapture = (stream, ws) => {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
     
-    recognition.lang = 'ko-KR';
-    recognition.continuous = true;  // 계속 듣기
-    recognition.interimResults = true;
-
-    recognition.onstart = () => {
-      setStatus('듣는중...');
-      lastTranscriptRef.current = '';
-      setCurrentTranscript('');
-    };
-
-    recognition.onresult = (event) => {
-      if (isSpeakingRef.current || isProcessingRef.current) return;
+    processor.onaudioprocess = (e) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
       
-      let currentText = '';
-      
-      for (let i = 0; i < event.results.length; i++) {
-        currentText += event.results[i][0].transcript;
+      const inputData = e.inputBuffer.getChannelData(0);
+      const pcm16 = new Int16Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
       }
       
-      setCurrentTranscript(currentText);
-      lastTranscriptRef.current = currentText;
-      
-      // 무음 타이머 리셋
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
-      
-      // 2초 무음 후 처리
-      silenceTimerRef.current = setTimeout(() => {
-        const finalText = lastTranscriptRef.current.trim();
-        if (finalText && voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-          lastTranscriptRef.current = '';
-          setCurrentTranscript('');
-          processUserMessage(finalText);
-        }
-      }, 2000);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
+      ws.send(JSON.stringify({ type: 'audio', data: base64 }));
     };
-
-    recognition.onerror = (event) => {
-      console.log('음성 인식 에러:', event.error);
-      if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current && event.error !== 'aborted') {
-        setTimeout(() => {
-          if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            startRecognition();
-          }
-        }, 500);
-      }
-    };
-
-    recognition.onend = () => {
-      if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-        setTimeout(() => {
-          if (voiceModeRef.current && !isSpeakingRef.current && !isProcessingRef.current) {
-            startRecognition();
-          }
-        }, 300);
-      } else if (!voiceModeRef.current) {
-        setStatus('대기중');
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    processorRef.current = { processor, source, audioContext };
   };
 
-  // 사용자 메시지 처리
-  const processUserMessage = async (text) => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-    
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch(e) {}
-    }
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    
-    addMessage(text, true);
-    setStatus('생각중...');
-    
-    // "지니야" 호출 감지
-    const isGenieCall = /지니|진희|진이|지은|지연/.test(text);
-    const cleanText = text.replace(/지니야?|진희야?|진이야?|지은아?|지연아?/g, '').trim();
-    
-    if (isGenieCall && cleanText.length < 5) {
-      addMessage('네, 대표님!', false);
-      await speakGenie('네, 대표님!', true);
-      return;
-    }
-    
-    const commandText = cleanText.length >= 5 ? cleanText : text;
-    
-    // 전화 요청 감지
-    if (commandText.includes('전화') || commandText.includes('콜') || commandText.includes('통화')) {
-      const phoneMatch = commandText.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
+  // 전화 명령 감지
+  const checkCallCommand = (text) => {
+    if (text.includes('전화') || text.includes('콜') || text.includes('통화')) {
+      const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
       const namePatterns = [
         /([가-힣]{2,4})\s*(교수|선생|님|씨|고객|대표|사장|부장|과장|차장|팀장)?/,
         /([가-힣]{2,4})(에게|한테|께)/
@@ -227,8 +214,8 @@ function AgentPage() {
       
       let name = '';
       for (const pattern of namePatterns) {
-        const match = commandText.match(pattern);
-        if (match && !['전화', '통화', '연결'].includes(match[1])) {
+        const match = text.match(pattern);
+        if (match && !['전화', '통화', '연결', '고객'].includes(match[1])) {
           name = match[1];
           break;
         }
@@ -236,65 +223,45 @@ function AgentPage() {
       
       const phone = phoneMatch ? phoneMatch[0] : '';
       
-      if (phone && name) {
-        const confirmMsg = `네, ${name}님께 전화합니다.`;
-        addMessage(confirmMsg, false);
-        await speakGenie(confirmMsg);
-        await makeCall(name, phone);
-        return;
-      } else if (name) {
-        const askPhone = `${name}님 전화번호요?`;
-        addMessage(askPhone, false);
-        await speakGenie(askPhone, true);
-        return;
-      } else if (phone) {
-        addMessage('네, 전화합니다.', false);
-        await speakGenie('네, 전화합니다.');
-        await makeCall('고객', phone);
-        return;
-      } else {
-        addMessage('누구에게 전화할까요?', false);
-        await speakGenie('누구에게 전화할까요?', true);
-        return;
+      if (phone) {
+        setTimeout(() => {
+          makeCall(name || '고객', phone);
+        }, 2000);
       }
     }
-    
-    // 일반 대화
-    const reply = await askGenie(commandText);
-    addMessage(reply, false);
-    await speakGenie(reply);
-  };
-
-  // 보이스 모드 시작
-  const startVoiceMode = () => {
-    voiceModeRef.current = true;
-    isSpeakingRef.current = false;
-    isProcessingRef.current = false;
-    lastTranscriptRef.current = '';
-    setCurrentTranscript('');
-    setIsVoiceMode(true);
-    setStatus('듣는중...');
-    startRecognition();
   };
 
   // 보이스 모드 종료
   const stopVoiceMode = () => {
-    voiceModeRef.current = false;
-    isSpeakingRef.current = false;
-    isProcessingRef.current = false;
-    lastTranscriptRef.current = '';
-    setCurrentTranscript('');
+    // WebSocket 종료
+    if (wsRef.current) {
+      wsRef.current.send(JSON.stringify({ type: 'stop' }));
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    
+    // 마이크 종료
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    
+    // 오디오 프로세서 종료
+    if (processorRef.current) {
+      const { processor, source, audioContext } = processorRef.current;
+      processor.disconnect();
+      source.disconnect();
+      audioContext.close();
+      processorRef.current = null;
+    }
+    
+    // 오디오 큐 초기화
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    
     setIsVoiceMode(false);
     setStatus('대기중');
-    
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch(e) {}
-    }
-    window.speechSynthesis.cancel();
+    setCurrentTranscript('');
   };
 
   // 전화 걸기
@@ -324,22 +291,21 @@ function AgentPage() {
         
         addMessage(`📞 ${name}님 통화 연결됨`, false);
       } else {
-        addMessage(`❌ 연결 실패`, false);
-        await speakGenie('연결 실패했습니다.', true);
+        addMessage(`❌ 연결 실패: ${data.error}`, false);
         setStatus('대기중');
       }
     } catch (error) {
       console.error('전화 에러:', error);
       addMessage('⏳ 잠시 후 다시 시도해주세요.', false);
-      await speakGenie('잠시 후 다시요.', true);
       setStatus('대기중');
     }
   };
 
   // 전화 종료
-  const endCall = async () => {
+  const endCall = () => {
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
     }
     
     const name = currentCall?.name || '고객';
@@ -349,8 +315,7 @@ function AgentPage() {
     setCallDuration(0);
     setStatus('대기중');
     
-    addMessage(`📴 통화 종료 (${duration})`, false);
-    await speakGenie('통화 종료했습니다.', true);
+    addMessage(`📴 ${name}님 통화 종료 (${duration})`, false);
   };
 
   const formatDuration = (seconds) => {
@@ -359,11 +324,28 @@ function AgentPage() {
     return `${m}분 ${s}초`;
   };
 
+  // 텍스트 전송 (백업용)
   const handleSend = async () => {
     if (!inputText.trim()) return;
     const text = inputText;
     setInputText('');
-    await processUserMessage(text);
+    
+    addMessage(text, true);
+    setStatus('생각중...');
+    
+    try {
+      const response = await fetch(`${RENDER_SERVER}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      const data = await response.json();
+      addMessage(data.reply, false);
+    } catch (error) {
+      addMessage('네, 대표님!', false);
+    }
+    
+    setStatus('대기중');
   };
 
   return (
@@ -396,15 +378,9 @@ function AgentPage() {
         <div className="voice-banner">
           <div className="voice-info">
             <span className="voice-icon">🎙️</span>
-            <span>듣고 있어요</span>
+            <span>AI 지니와 대화중</span>
           </div>
           <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
-        </div>
-      )}
-
-      {isVoiceMode && currentTranscript && (
-        <div className="transcript-banner">
-          🎤 {currentTranscript}
         </div>
       )}
 
@@ -413,7 +389,8 @@ function AgentPage() {
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>🎙️ 버튼 누르고 "지니야" 불러주세요.</p>
+            <p>🎙️ 버튼 누르고 자유롭게 말씀하세요.</p>
+            <p className="welcome-hint">말 끝나면 지니가 바로 응답해요</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -428,10 +405,8 @@ function AgentPage() {
       </div>
 
       <div className="quick-actions">
-        <button onClick={async () => {
-          addMessage('지니야', true);
-          addMessage('네, 대표님!', false);
-          await speakGenie('네, 대표님!', true);
+        <button onClick={() => {
+          if (!isVoiceMode) startVoiceMode();
         }}>🧞 지니야</button>
         <button disabled={!currentCall} onClick={endCall}>📴 통화종료</button>
       </div>
@@ -445,12 +420,13 @@ function AgentPage() {
         </button>
         <input
           type="text"
-          placeholder="지니야..."
+          placeholder="텍스트로 입력..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+          disabled={isVoiceMode}
         />
-        <button className="send-btn" onClick={handleSend}>➤</button>
+        <button className="send-btn" onClick={handleSend} disabled={isVoiceMode}>➤</button>
       </div>
     </div>
   );
