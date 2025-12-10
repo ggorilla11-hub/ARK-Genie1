@@ -56,11 +56,10 @@ function AgentPage() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ko-KR';
-      utterance.rate = 0.95; // 약간 천천히
-      utterance.pitch = 0.9; // 낮은 톤 (성숙한 느낌)
+      utterance.rate = 0.95;
+      utterance.pitch = 0.9;
       utterance.volume = 1.0;
       
-      // 성숙한 여성 목소리 선택
       const voices = window.speechSynthesis.getVoices();
       const koreanFemale = voices.find(v => 
         v.lang.includes('ko') && (v.name.includes('Female') || v.name.includes('여'))
@@ -70,7 +69,6 @@ function AgentPage() {
       
       utterance.onend = () => {
         isSpeakingRef.current = false;
-        // 1초 대기 후 다시 듣기
         setTimeout(() => {
           if (voiceModeRef.current && !isSpeakingRef.current) {
             startRecognition();
@@ -126,8 +124,8 @@ function AgentPage() {
     const recognition = new SpeechRecognition();
     
     recognition.lang = 'ko-KR';
-    recognition.continuous = true; // 계속 듣기
-    recognition.interimResults = true; // 중간 결과 표시
+    recognition.continuous = true;
+    recognition.interimResults = true;
 
     recognition.onstart = () => {
       setStatus('듣는중...');
@@ -149,21 +147,17 @@ function AgentPage() {
         }
       }
       
-      // 최종 인식된 텍스트 누적
       if (finalTranscript) {
         transcriptRef.current += finalTranscript;
       }
       
-      // 화면에 실시간 표시
       const displayText = (transcriptRef.current + interimTranscript).trim();
       setCurrentTranscript(displayText);
       
-      // 무음 타이머 리셋 - 말할 때마다 1초 재시작
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
       
-      // 1초 동안 추가 입력 없으면 처리
       silenceTimerRef.current = setTimeout(() => {
         const fullText = transcriptRef.current.trim();
         if (fullText && voiceModeRef.current && !isSpeakingRef.current) {
@@ -203,7 +197,6 @@ function AgentPage() {
 
   // 사용자 메시지 처리 (전화 감지 포함)
   const processUserMessage = async (text) => {
-    // 음성 인식 중지
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch(e) {}
     }
@@ -211,11 +204,8 @@ function AgentPage() {
     addMessage(text, true);
     setStatus('생각중...');
     
-    // 전화 요청 감지
     if (text.includes('전화') || text.includes('콜') || text.includes('통화')) {
-      // 전화번호 추출
       const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
-      // 이름 추출
       const namePatterns = [
         /([가-힣]{2,4})\s*(교수|선생|님|씨|고객|대표|사장|부장|과장|차장|팀장)?/,
         /([가-힣]{2,4})(에게|한테|께)/
@@ -233,7 +223,6 @@ function AgentPage() {
       const phone = phoneMatch ? phoneMatch[0] : '';
       
       if (phone && name) {
-        // 복명복창 후 전화 연결
         const confirmMsg = `네, ${name}님(${phone})께 바로 전화하겠습니다.`;
         addMessage(confirmMsg, false);
         await speakGenie(confirmMsg);
@@ -258,7 +247,6 @@ function AgentPage() {
       }
     }
     
-    // 일반 대화
     const reply = await askGenie(text);
     addMessage(reply, false);
     await speakGenie(reply);
@@ -296,9 +284,7 @@ function AgentPage() {
 
   // 전화 걸기 (UI 전환)
   const makeCall = async (name, phone) => {
-    // 보이스 모드 중지
     stopVoiceMode();
-    
     setStatus('전화 연결중...');
     
     try {
@@ -317,10 +303,9 @@ function AgentPage() {
         setCallDuration(0);
         setStatus('통화중');
         
-        // 통화 시간 카운터
         callTimerRef.current = setInterval(() => {
           setCallDuration(prev => prev + 1);
-        }, 2000);
+        }, 1000);
         
         addMessage(`📞 ${name}님과 통화 연결됨`, false);
       } else {
@@ -383,7 +368,6 @@ function AgentPage() {
         </div>
       </header>
 
-      {/* 통화중 배너 */}
       {currentCall && (
         <div className="call-banner">
           <div className="call-info">
@@ -395,7 +379,6 @@ function AgentPage() {
         </div>
       )}
 
-      {/* 보이스 모드 배너 */}
       {isVoiceMode && !currentCall && (
         <div className="voice-banner">
           <div className="voice-info">
@@ -406,14 +389,12 @@ function AgentPage() {
         </div>
       )}
 
-      {/* 현재 인식 중인 텍스트 */}
       {isVoiceMode && currentTranscript && (
         <div className="transcript-banner">
           🎤 {currentTranscript}
         </div>
       )}
 
-      {/* 채팅 영역 */}
       <div className="chat-area" ref={chatAreaRef}>
         {messages.length === 0 ? (
           <div className="welcome-message">
@@ -434,7 +415,6 @@ function AgentPage() {
         )}
       </div>
 
-      {/* 퀵 액션 */}
       <div className="quick-actions">
         <button onClick={async () => {
           addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
@@ -443,7 +423,6 @@ function AgentPage() {
         <button disabled={!currentCall} onClick={endCall}>📴 통화종료</button>
       </div>
 
-      {/* 입력 영역 */}
       <div className="input-area">
         <button 
           className={`voice-btn ${isVoiceMode ? 'active' : ''}`}
