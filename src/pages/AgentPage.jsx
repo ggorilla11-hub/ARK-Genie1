@@ -11,7 +11,8 @@ function AgentPage() {
   const [status, setStatus] = useState('대기중');
   const [currentCall, setCurrentCall] = useState(null);
   const [callDuration, setCallDuration] = useState(0);
-  const [pendingCall, setPendingCall] = useState(null);
+  const [showCallPopup, setShowCallPopup] = useState(false);
+  const [callTranscript, setCallTranscript] = useState([]);
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -22,12 +23,8 @@ function AgentPage() {
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
-  const messagesRef = useRef([]);
-
-  // 메시지 동기화
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+  const userMessageQueueRef = useRef([]);
+  const assistantMessageQueueRef = useRef([]);
 
   useEffect(() => {
     if (chatAreaRef.current) {
@@ -42,32 +39,36 @@ function AgentPage() {
     };
   }, []);
 
-  // 대기 중인 전화 처리
-  useEffect(() => {
-    if (pendingCall && !currentCall) {
-      const { name, phone } = pendingCall;
-      setPendingCall(null);
-      makeCall(name, phone);
-    }
-  }, [pendingCall, currentCall]);
-
-  const addMessage = (text, isUser, skipDuplicate = false) => {
-    if (skipDuplicate) {
-      const lastMsg = messagesRef.current[messagesRef.current.length - 1];
+  const addMessage = (text, isUser) => {
+    setMessages(prev => {
+      // 중복 체크
+      const lastMsg = prev[prev.length - 1];
       if (lastMsg && lastMsg.text === text && lastMsg.isUser === isUser) {
-        return;
+        return prev;
       }
-    }
-    
-    setMessages(prev => [...prev, {
-      id: Date.now() + Math.random(),
-      text,
-      isUser,
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-    }]);
+      return [...prev, {
+        id: Date.now() + Math.random(),
+        text,
+        isUser,
+        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      }];
+    });
   };
 
-  // 신호음 재생
+  // 순서 보장 메시지 추가
+  const addOrderedMessage = (text, isUser) => {
+    if (isUser) {
+      userMessageQueueRef.current.push(text);
+      // 사용자 메시지는 즉시 추가
+      addMessage(text, true);
+    } else {
+      // 지니 메시지는 사용자 메시지 후에 추가
+      setTimeout(() => {
+        addMessage(text, false);
+      }, 100);
+    }
+  };
+
   const playBeep = (type = 'start') => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -77,23 +78,13 @@ function AgentPage() {
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       
-      if (type === 'start') {
-        oscillator.frequency.value = 880;
-        gainNode.gain.value = 0.2;
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.15);
-      } else {
-        oscillator.frequency.value = 440;
-        gainNode.gain.value = 0.2;
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.2);
-      }
-    } catch (e) {
-      console.log('신호음 재생 실패:', e);
-    }
+      oscillator.frequency.value = type === 'start' ? 880 : 440;
+      gainNode.gain.value = 0.2;
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {}
   };
 
-  // Base64 오디오 재생
   const playAudio = async (base64Audio) => {
     audioQueueRef.current.push(base64Audio);
     if (!isPlayingRef.current) {
@@ -141,7 +132,6 @@ function AgentPage() {
       source.onended = () => processAudioQueue();
       source.start();
     } catch (e) {
-      console.error('오디오 재생 에러:', e);
       processAudioQueue();
     }
   };
@@ -175,54 +165,43 @@ function AgentPage() {
     isConnectedRef.current = false;
   };
 
-  // 사용자 메시지에서 전화 명령 감지
-  const checkUserCallCommand = (text) => {
-    if (text.includes('전화') || text.includes('콜') || text.includes('통화')) {
-      const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
-      
-      if (phoneMatch) {
-        const phone = phoneMatch[0];
-        
-        // 이름 추출
-        const namePatterns = [
-          /([가-힣]{2,4})\s*(교수|선생|님|씨|고객|대표|사장|부장|과장|차장|팀장)?/g
-        ];
-        
-        let name = '고객';
-        for (const pattern of namePatterns) {
-          const matches = [...text.matchAll(pattern)];
-          for (const match of matches) {
-            if (match[1] && !['전화', '통화', '연결', '고객', '해줘', '해주세요', '부탁'].includes(match[1])) {
-              name = match[1];
-              break;
-            }
-          }
+  // 전화번호 감지 (전화번호 + 아무 글자)
+  const checkCallCommand = (text) => {
+    const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
+    
+    if (!phoneMatch) return null;
+    
+    const phone = phoneMatch[0];
+    const textWithoutPhone = text.replace(phone, '').trim();
+    
+    // 전화번호만 있으면 무시 (최소 1글자 이상 있어야 함)
+    if (textWithoutPhone.length < 1) return null;
+    
+    // 이름 추출
+    let name = '고객';
+    const nameMatch = text.match(/([가-힣]{2,4})/g);
+    if (nameMatch) {
+      const excludeWords = ['전화', '통화', '연결', '해줘', '해주세요', '부탁', '입니다', '에게', '한테', '번호', '연락', '고객'];
+      for (const n of nameMatch) {
+        if (!excludeWords.includes(n)) {
+          name = n;
+          break;
         }
-        
-        return { name, phone };
       }
     }
-    return null;
+    
+    return { name, phone };
   };
 
-  // WebSocket 연결 및 Realtime API 시작
   const startVoiceMode = async () => {
-    if (isConnectedRef.current) {
-      console.log('이미 연결됨');
-      return;
-    }
+    if (isConnectedRef.current) return;
     
     try {
       setStatus('연결중...');
       setIsVoiceMode(true);
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 24000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
-        } 
+        audio: { sampleRate: 24000, channelCount: 1, echoCancellation: true, noiseSuppression: true } 
       });
       mediaStreamRef.current = stream;
       
@@ -230,7 +209,6 @@ function AgentPage() {
       wsRef.current = ws;
       
       ws.onopen = () => {
-        console.log('✅ WebSocket 연결됨');
         ws.send(JSON.stringify({ type: 'start_app' }));
       };
       
@@ -239,7 +217,6 @@ function AgentPage() {
           const msg = JSON.parse(event.data);
           
           if (msg.type === 'session_started') {
-            console.log('✅ 세션 시작됨');
             isConnectedRef.current = true;
             setStatus('듣는중...');
             playBeep('start');
@@ -250,55 +227,44 @@ function AgentPage() {
             playAudio(msg.data);
           }
           
-          // 사용자 음성 텍스트
+          // 사용자 메시지 (먼저)
           if (msg.type === 'transcript' && msg.role === 'user') {
-            addMessage(msg.text, true, true);
+            addOrderedMessage(msg.text, true);
             
-            // 사용자 메시지에서 전화 명령 감지
-            const callInfo = checkUserCallCommand(msg.text);
+            // 전화 명령 감지
+            const callInfo = checkCallCommand(msg.text);
             if (callInfo) {
-              console.log('📞 전화 명령 감지:', callInfo);
-              setPendingCall(callInfo);
+              setTimeout(() => {
+                makeCall(callInfo.name, callInfo.phone);
+              }, 2000);
             }
           }
           
-          // 지니 응답 텍스트
+          // 지니 메시지 (나중)
           if (msg.type === 'transcript' && msg.role === 'assistant') {
-            addMessage(msg.text, false, true);
+            addOrderedMessage(msg.text, false);
           }
           
           if (msg.type === 'interrupt') {
             audioQueueRef.current = [];
             isPlayingRef.current = false;
           }
-          
-          if (msg.type === 'error') {
-            console.error('서버 에러:', msg.error);
-          }
-          
-        } catch (e) {
-          console.error('메시지 파싱 에러:', e);
-        }
+        } catch (e) {}
       };
       
-      ws.onerror = (error) => {
-        console.error('❌ WebSocket 에러:', error);
+      ws.onerror = () => {
         setStatus('연결 실패');
         cleanupVoiceMode();
         setIsVoiceMode(false);
       };
       
       ws.onclose = () => {
-        console.log('🔌 WebSocket 종료');
         isConnectedRef.current = false;
-        if (isVoiceMode) {
-          setStatus('대기중');
-          setIsVoiceMode(false);
-        }
+        setStatus('대기중');
+        setIsVoiceMode(false);
       };
       
     } catch (error) {
-      console.error('마이크 에러:', error);
       alert('마이크 권한이 필요합니다.');
       cleanupVoiceMode();
       setIsVoiceMode(false);
@@ -328,9 +294,7 @@ function AgentPage() {
       source.connect(processor);
       processor.connect(audioContext.destination);
       processorRef.current = { processor, source, audioContext };
-    } catch (e) {
-      console.error('오디오 캡처 에러:', e);
-    }
+    } catch (e) {}
   };
 
   const stopVoiceMode = () => {
@@ -342,21 +306,12 @@ function AgentPage() {
 
   // 전화 걸기
   const makeCall = async (name, phone) => {
-    console.log('📞 전화 걸기 시작:', name, phone);
-    
-    // 보이스 모드 종료
     stopVoiceMode();
-    
-    // 2초 대기 (지니가 말하는 시간)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
     setStatus('전화 연결중...');
     
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
-      
-      console.log('📞 API 호출:', fullPhone);
       
       const response = await fetch(`${RENDER_SERVER}/api/call`, {
         method: 'POST',
@@ -365,30 +320,53 @@ function AgentPage() {
       });
       const data = await response.json();
       
-      console.log('📞 API 응답:', data);
-      
       if (data.success) {
         setCurrentCall({ name, phone, callSid: data.callSid });
         setCallDuration(0);
         setStatus('통화중');
+        setShowCallPopup(true);
+        setCallTranscript([]);
         
         callTimerRef.current = setInterval(() => {
           setCallDuration(prev => prev + 1);
         }, 1000);
         
         addMessage(`📞 ${name}님 통화 연결됨`, false);
+        
+        // 통화 상태 폴링 (자동 종료 감지)
+        pollCallStatus(data.callSid);
       } else {
         addMessage(`❌ 연결 실패: ${data.error}`, false);
         setStatus('대기중');
       }
     } catch (error) {
-      console.error('전화 에러:', error);
       addMessage('⏳ 잠시 후 다시 시도해주세요.', false);
       setStatus('대기중');
     }
   };
 
-  const endCall = () => {
+  // 통화 상태 폴링 (자동 종료)
+  const pollCallStatus = (callSid) => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`${RENDER_SERVER}/api/call-status/${callSid}`);
+        const data = await response.json();
+        
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'busy' || data.status === 'no-answer') {
+          endCall(true);
+        } else if (currentCall) {
+          setTimeout(checkStatus, 3000);
+        }
+      } catch (e) {
+        setTimeout(checkStatus, 5000);
+      }
+    };
+    
+    setTimeout(checkStatus, 5000);
+  };
+
+  // 전화 종료
+  const endCall = (auto = false) => {
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
@@ -400,18 +378,19 @@ function AgentPage() {
     setCurrentCall(null);
     setCallDuration(0);
     setStatus('대기중');
+    setShowCallPopup(false);
+    setCallTranscript([]);
     setIsVoiceMode(false);
-    setPendingCall(null);
     
     cleanupVoiceMode();
     
-    addMessage(`📴 ${name}님 통화 종료 (${duration})`, false);
+    addMessage(`📴 ${name}님 통화 종료 (${duration})${auto ? ' - 자동' : ''}`, false);
   };
 
   const formatDuration = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return `${m}분 ${s}초`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   const handleSend = async () => {
@@ -421,8 +400,7 @@ function AgentPage() {
     
     addMessage(text, true);
     
-    // 텍스트에서도 전화 명령 감지
-    const callInfo = checkUserCallCommand(text);
+    const callInfo = checkCallCommand(text);
     if (callInfo) {
       addMessage(`네, ${callInfo.name}님께 전화합니다.`, false);
       await makeCall(callInfo.name, callInfo.phone);
@@ -461,17 +439,6 @@ function AgentPage() {
         </div>
       </header>
 
-      {currentCall && (
-        <div className="call-banner">
-          <div className="call-info">
-            <span className="call-icon">📞</span>
-            <span>{currentCall.name}님 통화중</span>
-            <span className="call-duration">{formatDuration(callDuration)}</span>
-          </div>
-          <button className="end-call-btn" onClick={endCall}>종료</button>
-        </div>
-      )}
-
       {isVoiceMode && !currentCall && (
         <div className="voice-banner">
           <div className="voice-info">
@@ -479,6 +446,29 @@ function AgentPage() {
             <span>AI 지니와 대화중</span>
           </div>
           <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
+        </div>
+      )}
+
+      {/* 통화 팝업 UI */}
+      {showCallPopup && currentCall && (
+        <div className="call-popup-overlay">
+          <div className="call-popup">
+            <div className="call-popup-header">
+              <h3>📞 통화중</h3>
+            </div>
+            <div className="call-popup-body">
+              <div className="call-avatar">👤</div>
+              <div className="call-name">{currentCall.name}</div>
+              <div className="call-number">{currentCall.phone}</div>
+              <div className="call-timer">{formatDuration(callDuration)}</div>
+              <div className="call-status-text">통화중...</div>
+            </div>
+            <div className="call-popup-actions">
+              <button className="call-end-btn" onClick={() => endCall(false)}>
+                📴 통화 종료
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -502,10 +492,8 @@ function AgentPage() {
       </div>
 
       <div className="quick-actions">
-        <button onClick={() => {
-          if (!isVoiceMode) startVoiceMode();
-        }}>🧞 지니야</button>
-        <button disabled={!currentCall} onClick={endCall}>📴 통화종료</button>
+        <button onClick={() => { if (!isVoiceMode) startVoiceMode(); }}>🧞 지니야</button>
+        <button disabled={!currentCall} onClick={() => endCall(false)}>📴 통화종료</button>
       </div>
 
       <div className="input-area">
