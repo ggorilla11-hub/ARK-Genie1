@@ -12,26 +12,21 @@ function AgentPage() {
   const [callState, setCallState] = useState({ name: '', phone: '', duration: 0, status: '' });
   const [isTyping, setIsTyping] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
-  const [pendingAction, setPendingAction] = useState(null);
   
   const recognitionRef = useRef(null);
-  const silenceTimerRef = useRef(null);
   const callTimerRef = useRef(null);
   const chatEndRef = useRef(null);
+  const isProcessingRef = useRef(false);
+  const finalTranscriptRef = useRef('');
+  const silenceTimerRef = useRef(null);
   
-  // ⭐ 핵심: useRef로 상태 관리 (리렌더링과 무관하게 유지)
-  const voiceModeRef = useRef(false); // 보이스 모드 ON/OFF
-  const isProcessingRef = useRef(false); // 처리 중 여부
-  const keepListeningRef = useRef(null); // 지속 듣기 인터벌
-  
-  const SILENCE_TIMEOUT = 1500;
   const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
 
   // 메시지 추가
-  const addMessage = (text, isUser = false, card = null, buttons = null) => {
+  const addMessage = (text, isUser = false, card = null) => {
     const now = new Date();
     const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setMessages(prev => [...prev, { id: Date.now(), text, isUser, time, card, buttons }]);
+    setMessages(prev => [...prev, { id: Date.now(), text, isUser, time, card }]);
   };
 
   // 타임라인 추가
@@ -39,88 +34,44 @@ function AgentPage() {
     setTimeline(prev => [...prev, { id: Date.now(), icon, text, status: tlStatus }]);
   };
 
-  // TTS 음성 출력
+  // TTS 음성 출력 (안정화)
   const speak = (text) => {
     return new Promise((resolve) => {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ko-KR';
-        utterance.rate = 1.0;
-        utterance.pitch = 1.1;
         
-        const voices = window.speechSynthesis.getVoices();
-        const koreanVoice = voices.find(v => v.lang.includes('ko') && v.name.includes('Female')) 
-          || voices.find(v => v.lang.includes('ko'))
-          || voices[0];
-        if (koreanVoice) utterance.voice = koreanVoice;
-        
-        utterance.onend = () => {
-          // 지니가 말 끝나면 다시 듣기 (보이스 모드가 켜져있을 때만)
-          if (voiceModeRef.current) {
-            isProcessingRef.current = false;
-            setTimeout(() => forceStartRecognition(), 300);
-          }
-          resolve();
-        };
-        utterance.onerror = () => {
-          if (voiceModeRef.current) {
-            isProcessingRef.current = false;
-            setTimeout(() => forceStartRecognition(), 300);
-          }
-          resolve();
-        };
-        window.speechSynthesis.speak(utterance);
+        setTimeout(() => {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'ko-KR';
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          
+          const voices = window.speechSynthesis.getVoices();
+          const koreanVoice = voices.find(v => v.lang.includes('ko'));
+          if (koreanVoice) utterance.voice = koreanVoice;
+          
+          utterance.onend = resolve;
+          utterance.onerror = resolve;
+          window.speechSynthesis.speak(utterance);
+        }, 100);
       } else {
-        if (voiceModeRef.current) {
-          isProcessingRef.current = false;
-          setTimeout(() => forceStartRecognition(), 300);
-        }
         resolve();
       }
     });
   };
 
-  // ⭐ 강제 음성 인식 시작 (절대 실패하지 않도록)
-  const forceStartRecognition = () => {
-    if (!voiceModeRef.current || isProcessingRef.current) return;
-    
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-      
-      setTimeout(() => {
-        if (voiceModeRef.current && !isProcessingRef.current) {
-          try {
-            recognitionRef.current.start();
-            setStatus('듣는중');
-            console.log('🎤 음성 인식 시작됨');
-          } catch (e) {
-            console.log('음성 인식 시작 재시도:', e.message);
-            // 실패해도 다시 시도
-            setTimeout(() => forceStartRecognition(), 500);
-          }
-        }
-      }, 100);
-    }
-  };
-
-  // 음성 인식 초기화
+  // 음성 인식 초기화 (단순화 - 띵띵 소리 제거)
   useEffect(() => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
+      recognitionRef.current.continuous = false; // 단일 인식 모드
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'ko-KR';
-      recognitionRef.current.maxAlternatives = 1;
 
       recognitionRef.current.onresult = (event) => {
-        if (isProcessingRef.current) return;
-        
-        let finalTranscript = '';
         let interimTranscript = '';
+        let finalTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
@@ -131,41 +82,50 @@ function AgentPage() {
           }
         }
 
-        // 실시간 텍스트 표시
         if (interimTranscript) {
           setCurrentTranscript(interimTranscript);
         }
 
-        // 무음 타이머 리셋
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-
-        // 최종 인식 결과 처리
-        if (finalTranscript.trim()) {
+        if (finalTranscript) {
+          finalTranscriptRef.current = finalTranscript;
           setCurrentTranscript(finalTranscript);
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        // 인식 종료시 최종 텍스트 처리
+        if (finalTranscriptRef.current && !isProcessingRef.current) {
+          const text = finalTranscriptRef.current.trim();
+          finalTranscriptRef.current = '';
           
-          silenceTimerRef.current = setTimeout(() => {
-            if (finalTranscript.trim() && voiceModeRef.current && !isProcessingRef.current) {
-              handleUserInput(finalTranscript.trim());
+          if (text) {
+            processUserInput(text);
+          } else if (isListening) {
+            // 텍스트 없으면 다시 시작 (3초 대기)
+            setTimeout(() => {
+              if (isListening && !isProcessingRef.current) {
+                startRecognition();
+              }
+            }, 1000);
+          }
+        } else if (isListening && !isProcessingRef.current) {
+          // 다시 듣기 시작
+          setTimeout(() => {
+            if (isListening && !isProcessingRef.current) {
+              startRecognition();
             }
-          }, SILENCE_TIMEOUT);
+          }, 1000);
         }
       };
 
       recognitionRef.current.onerror = (event) => {
         console.log('음성 인식 오류:', event.error);
-        // ⭐ 어떤 에러가 나도 보이스 모드면 다시 시작
-        if (voiceModeRef.current && !isProcessingRef.current) {
-          setTimeout(() => forceStartRecognition(), 500);
-        }
-      };
-
-      recognitionRef.current.onend = () => {
-        console.log('음성 인식 종료됨, 보이스모드:', voiceModeRef.current);
-        // ⭐ 보이스 모드가 켜져있으면 무조건 다시 시작
-        if (voiceModeRef.current && !isProcessingRef.current) {
-          setTimeout(() => forceStartRecognition(), 300);
+        if (event.error !== 'aborted' && isListening && !isProcessingRef.current) {
+          setTimeout(() => {
+            if (isListening && !isProcessingRef.current) {
+              startRecognition();
+            }
+          }, 2000);
         }
       };
     }
@@ -173,353 +133,175 @@ function AgentPage() {
     // 음성 목록 로드
     if ('speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
     }
 
     return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (callTimerRef.current) clearInterval(callTimerRef.current);
-      if (keepListeningRef.current) clearInterval(keepListeningRef.current);
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
-  }, []);
+  }, [isListening]);
 
   // 채팅 스크롤
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // ⭐ 보이스 모드 시작 (절대 꺼지지 않음)
-  const startVoiceMode = () => {
-    voiceModeRef.current = true;
-    isProcessingRef.current = false;
+  // 음성 인식 시작 (안정화)
+  const startRecognition = () => {
+    if (recognitionRef.current && !isProcessingRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        // 이미 시작된 경우 무시
+      }
+    }
+  };
+
+  // 보이스 모드 시작
+  const startVoiceMode = async () => {
     setIsListening(true);
     setStatus('듣는중');
     setCurrentTranscript('');
+    finalTranscriptRef.current = '';
     
-    console.log('🎤 보이스 모드 ON');
+    // 시작 알림
+    await speak('네, 말씀하세요.');
     
-    // 즉시 시작
-    forceStartRecognition();
-    
-    // ⭐ 2초마다 듣기 상태 확인 및 복구
-    keepListeningRef.current = setInterval(() => {
-      if (voiceModeRef.current && !isProcessingRef.current) {
-        // 음성 인식이 죽어있으면 다시 시작
-        try {
-          if (recognitionRef.current) {
-            // 상태 확인 후 필요시 재시작
-            forceStartRecognition();
-          }
-        } catch (e) {}
-      }
-    }, 2000);
+    // 음성 인식 시작
+    setTimeout(() => {
+      startRecognition();
+    }, 500);
   };
 
-  // ⭐ 보이스 모드 종료
+  // 보이스 모드 종료
   const stopVoiceMode = () => {
-    console.log('🎤 보이스 모드 OFF');
-    
-    voiceModeRef.current = false;
-    isProcessingRef.current = false;
     setIsListening(false);
     setStatus('대기중');
     setCurrentTranscript('');
+    finalTranscriptRef.current = '';
     
-    // 인터벌 정리
-    if (keepListeningRef.current) {
-      clearInterval(keepListeningRef.current);
-      keepListeningRef.current = null;
-    }
-    
-    // 타이머 정리
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    
-    // 음성 인식 중지
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (e) {}
     }
     
-    // TTS 중지
     window.speechSynthesis.cancel();
   };
 
   // 사용자 입력 처리
-  const handleUserInput = async (text) => {
+  const processUserInput = async (text) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
     
-    // 음성 인식 일시 중지
-    try {
-      recognitionRef.current?.stop();
-    } catch (e) {}
+    // 음성 인식 일시 정지
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
     
     addMessage(text, true);
     setStatus('처리중');
     setCurrentTranscript('');
     setIsTyping(true);
 
-    // 대기 중인 명령에 대한 응답인지 확인
-    if (pendingAction) {
-      await handlePendingResponse(text);
+    // 간단한 키워드 분석
+    const lowerText = text.toLowerCase();
+    
+    // 전화 요청 감지
+    if (lowerText.includes('전화') || lowerText.includes('콜') || lowerText.includes('통화')) {
+      // 전화번호 추출
+      const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
+      // 이름 추출 (간단한 패턴)
+      const nameMatch = text.match(/([가-힣]{2,4})(에게|한테|님|께|교수|선생|고객)/);
+      
+      const phone = phoneMatch ? phoneMatch[0] : '';
+      const name = nameMatch ? nameMatch[1] : '';
+      
+      if (phone || name) {
+        await confirmAndCall(name || '고객', phone);
+      } else {
+        setIsTyping(false);
+        const reply = '어느 분께 전화할까요? 이름이나 전화번호를 알려주세요.';
+        addMessage(reply, false);
+        await speak(reply);
+        finishProcessing();
+      }
       return;
     }
-
-    // ⭐ GPT-4o로 의도 분석
-    await analyzeWithGPT4o(text);
+    
+    // 일반 대화 - GPT-4o 호출
+    await chatWithGPT(text);
   };
 
-  // ⭐ GPT-4o 최고 모델로 스마트 분석
-  const analyzeWithGPT4o = async (text) => {
+  // GPT-4o 대화
+  const chatWithGPT = async (text) => {
     try {
       const response = await fetch(`${RENDER_SERVER}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `당신은 보험설계사의 AI비서 "지니"입니다. 사용자 메시지를 분석하고 적절히 응답하세요.
-
-사용자: "${text}"
-
-[분석 방법]
-1. 전화/콜/통화 관련 → intent: "call"
-2. 카카오톡/카톡 관련 → intent: "kakao"  
-3. 문자/SMS 관련 → intent: "sms"
-4. 이메일/메일 관련 → intent: "email"
-5. 시트/기록/현황판 관련 → intent: "sheet"
-6. 캘린더/일정/스케줄 관련 → intent: "calendar"
-7. 일반 대화/질문/인사 → intent: "chat"
-8. 의도 불명확 → intent: "unclear"
-
-[중요]
-- 고객 이름이 있으면 추출 (예: "홍길동")
-- 전화번호가 있으면 추출 (예: "010-1234-5678")
-- 자연스럽고 친근한 응답 작성
-
-반드시 아래 JSON 형식으로만 응답:
-{"intent": "...", "name": "추출된이름 또는 빈문자열", "phone": "추출된번호 또는 빈문자열", "response": "자연스러운 한국어 응답"}`
-        })
+        body: JSON.stringify({ message: text })
       });
       
       const data = await response.json();
-      let parsed;
+      const reply = data.reply || '네, 알겠습니다!';
       
-      try {
-        const jsonMatch = data.reply.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('No JSON');
-        }
-      } catch (e) {
-        // JSON 파싱 실패 → 일반 대화로 처리
-        setIsTyping(false);
-        const reply = data.reply || '네, 무엇을 도와드릴까요?';
-        addMessage(reply, false);
-        await speak(reply);
-        setStatus('대기중');
-        isProcessingRef.current = false;
-        return;
-      }
-
-      await handleIntent(parsed);
+      setIsTyping(false);
+      addMessage(reply, false);
+      await speak(reply);
       
     } catch (error) {
-      console.error('GPT-4o 분석 오류:', error);
+      console.error('GPT 에러:', error);
       setIsTyping(false);
       addMessage('네, 무엇을 도와드릴까요?', false);
       await speak('네, 무엇을 도와드릴까요?');
-      setStatus('대기중');
-      isProcessingRef.current = false;
-    }
-  };
-
-  // 의도에 따른 처리
-  const handleIntent = async (parsed) => {
-    const { intent, name, phone, response } = parsed;
-    setIsTyping(false);
-
-    switch (intent) {
-      case 'call':
-        if (!phone && !name) {
-          const msg = '어느 고객님께 전화할까요? 이름이나 전화번호를 알려주세요.';
-          addMessage(msg, false);
-          await speak(msg);
-        } else {
-          const confirmMsg = phone 
-            ? `${name || '고객'}님 (${phone})께 전화할까요?`
-            : `${name} 고객님께 전화할까요?`;
-          
-          setPendingAction({ type: 'call', name: name || '고객', phone: phone || '' });
-          addMessage(confirmMsg, false, null, ['예, 전화해주세요', '아니오, 취소']);
-          await speak(confirmMsg);
-        }
-        break;
-
-      case 'kakao':
-        if (!name) {
-          const msg = '어느 고객님께 카카오톡을 보낼까요?';
-          addMessage(msg, false);
-          await speak(msg);
-        } else {
-          setPendingAction({ type: 'kakao', name });
-          const msg = `${name} 고객님께 카카오톡을 보낼까요?`;
-          addMessage(msg, false, null, ['예, 보내주세요', '아니오, 취소']);
-          await speak(msg);
-        }
-        break;
-
-      case 'sms':
-        if (!name && !phone) {
-          const msg = '어느 고객님께 문자를 보낼까요?';
-          addMessage(msg, false);
-          await speak(msg);
-        } else {
-          setPendingAction({ type: 'sms', name: name || '고객', phone });
-          const msg = `${name || '고객'}님께 문자를 보낼까요?`;
-          addMessage(msg, false, null, ['예, 보내주세요', '아니오, 취소']);
-          await speak(msg);
-        }
-        break;
-
-      case 'email':
-        if (!name) {
-          const msg = '어느 고객님께 이메일을 보낼까요?';
-          addMessage(msg, false);
-          await speak(msg);
-        } else {
-          setPendingAction({ type: 'email', name });
-          const msg = `${name} 고객님께 이메일을 보낼까요?`;
-          addMessage(msg, false, null, ['예, 보내주세요', '아니오, 취소']);
-          await speak(msg);
-        }
-        break;
-
-      case 'sheet':
-        setPendingAction({ type: 'sheet', name });
-        const sheetMsg = '고객현황판에 기록할까요?';
-        addMessage(sheetMsg, false, null, ['예, 기록해주세요', '아니오, 취소']);
-        await speak(sheetMsg);
-        break;
-
-      case 'calendar':
-        setPendingAction({ type: 'calendar', name });
-        const calMsg = '캘린더에 일정을 등록할까요?';
-        addMessage(calMsg, false, null, ['예, 등록해주세요', '아니오, 취소']);
-        await speak(calMsg);
-        break;
-
-      case 'unclear':
-        const unclearMsg = response || '죄송해요, 다시 한번 말씀해 주시겠어요?';
-        addMessage(unclearMsg, false);
-        await speak(unclearMsg);
-        break;
-
-      default: // chat - 일반 대화
-        const chatMsg = response || '네, 알겠습니다!';
-        addMessage(chatMsg, false);
-        await speak(chatMsg);
-    }
-
-    setStatus(voiceModeRef.current ? '듣는중' : '대기중');
-    isProcessingRef.current = false;
-  };
-
-  // 대기 중인 명령에 대한 응답 처리
-  const handlePendingResponse = async (text) => {
-    const lowerText = text.toLowerCase();
-    const isYes = lowerText.includes('예') || lowerText.includes('네') || lowerText.includes('응') || 
-                  lowerText.includes('좋아') || lowerText.includes('해줘') || lowerText.includes('부탁') ||
-                  lowerText.includes('어') || lowerText.includes('그래');
-    const isNo = lowerText.includes('아니') || lowerText.includes('취소') || lowerText.includes('됐어') ||
-                 lowerText.includes('말어') || lowerText.includes('하지마');
-
-    setIsTyping(false);
-
-    if (isYes) {
-      await executeAction(pendingAction);
-    } else if (isNo) {
-      addMessage('알겠습니다. 취소했어요.', false);
-      await speak('알겠습니다. 취소했어요.');
-    } else {
-      // 불명확한 응답
-      addMessage('예 또는 아니오로 답해주세요.', false);
-      await speak('예 또는 아니오로 답해주세요.');
-      isProcessingRef.current = false;
-      return;
-    }
-
-    setPendingAction(null);
-    setStatus(voiceModeRef.current ? '듣는중' : '대기중');
-    isProcessingRef.current = false;
-  };
-
-  // 버튼 클릭으로 응답
-  const handleButtonClick = async (buttonText) => {
-    addMessage(buttonText, true);
-    setIsTyping(true);
-    isProcessingRef.current = true;
-    
-    if (buttonText.includes('예') || buttonText.includes('네')) {
-      await executeAction(pendingAction);
-    } else {
-      setIsTyping(false);
-      addMessage('알겠습니다. 취소했어요.', false);
-      await speak('알겠습니다. 취소했어요.');
     }
     
-    setPendingAction(null);
-    isProcessingRef.current = false;
+    finishProcessing();
   };
 
-  // 실제 명령 실행
-  const executeAction = async (action) => {
-    if (!action) return;
-
-    const { type, name, phone } = action;
-
-    switch (type) {
-      case 'call':
+  // 전화 확인 및 실행
+  const confirmAndCall = async (name, phone) => {
+    setIsTyping(false);
+    
+    const confirmMsg = phone 
+      ? `${name}님 (${phone})께 전화할까요?`
+      : `${name}님께 전화할까요?`;
+    
+    addMessage(confirmMsg, false);
+    await speak(confirmMsg);
+    
+    // 확인 대기 (음성으로)
+    isProcessingRef.current = false;
+    setStatus('듣는중');
+    
+    // 임시로 바로 전화 실행 (데모용)
+    setTimeout(async () => {
+      if (phone) {
         await executeCall(name, phone);
-        break;
-      case 'kakao':
-        await executeKakao(name);
-        break;
-      case 'sms':
-        await executeSMS(name, phone);
-        break;
-      case 'email':
-        await executeEmail(name);
-        break;
-      case 'sheet':
-        await executeSheet(name);
-        break;
-      case 'calendar':
-        await executeCalendar(name);
-        break;
-    }
+      } else {
+        addMessage('전화번호를 알려주세요.', false);
+        await speak('전화번호를 알려주세요.');
+        finishProcessing();
+      }
+    }, 3000);
   };
 
   // 전화 실행
   const executeCall = async (name, phone) => {
-    setIsTyping(false);
-    addMessage(`네, ${name} 고객님께 전화 연결할게요.`, false);
-    await speak(`네, ${name} 고객님께 전화 연결할게요.`);
+    isProcessingRef.current = true;
+    
+    addMessage(`네, ${name}님께 전화 연결할게요.`, false);
+    await speak(`네, ${name}님께 전화 연결합니다.`);
     
     addTimeline('📞', `${name}님께 전화 연결 중`, 'loading');
     
-    // 보이스 모드 일시 중지 (통화 중)
-    const wasVoiceMode = voiceModeRef.current;
-    if (wasVoiceMode) {
-      stopVoiceMode();
-    }
+    // 보이스 모드 끄기
+    stopVoiceMode();
     
     setStatus('통화중');
-    setCallState({ name, phone: phone || '010-0000-0000', duration: 0, status: '연결중...' });
+    setCallState({ name, phone, duration: 0, status: '연결중...' });
     setShowCallPopup(true);
     
     let seconds = 0;
@@ -529,21 +311,27 @@ function AgentPage() {
     }, 1000);
 
     try {
-      const phoneNumber = phone || '010-0000-0000';
       const response = await fetch(`${RENDER_SERVER}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phoneNumber, customerName: name })
+        body: JSON.stringify({ to: phone, customerName: name })
       });
       
-      if (response.ok) {
+      const result = await response.json();
+      
+      if (result.success) {
         setCallState(prev => ({ ...prev, status: '통화중' }));
         addTimeline('📞', `${name}님과 통화 연결됨`, 'done');
+      } else {
+        setCallState(prev => ({ ...prev, status: '연결 실패' }));
+        addTimeline('📞', '전화 연결 실패', 'done');
       }
     } catch (error) {
-      console.error('전화 발신 오류:', error);
-      setCallState(prev => ({ ...prev, status: '통화중' }));
+      console.error('전화 에러:', error);
+      setCallState(prev => ({ ...prev, status: '연결 실패' }));
     }
+    
+    isProcessingRef.current = false;
   };
 
   // 통화 종료
@@ -558,100 +346,33 @@ function AgentPage() {
     setShowCallPopup(false);
     
     addTimeline('📞', `통화 완료 (${durationStr})`, 'done');
-    
-    addMessage(`${name} 고객님과 통화 완료!`, false, {
+    addMessage(`${name}님과 통화 완료! (${durationStr})`, false, {
       type: 'call',
       data: { name, duration: durationStr }
     });
     
-    await speak(`${name} 고객님과 통화가 완료되었습니다.`);
+    await speak(`${name}님과 통화가 완료되었습니다.`);
     setStatus('대기중');
   };
 
-  // 카카오톡 실행
-  const executeKakao = async (name) => {
-    setIsTyping(false);
-    addTimeline('💬', `${name}님께 카카오톡 발송 중`, 'loading');
-    addMessage(`네, ${name} 고객님께 카카오톡 보낼게요.`, false);
-    await speak(`네, ${name} 고객님께 카카오톡 보내겠습니다.`);
+  // 처리 완료
+  const finishProcessing = () => {
+    isProcessingRef.current = false;
     
-    setTimeout(() => {
-      addTimeline('💬', '카카오톡 발송 완료', 'done');
-      addMessage(`${name} 고객님께 카카오톡 보냈어요.`, false, {
-        type: 'kakao',
-        data: { name, messageType: '안내 메시지' }
-      });
-    }, 1500);
-  };
-
-  // SMS 실행
-  const executeSMS = async (name, phone) => {
-    setIsTyping(false);
-    addTimeline('📱', `${name}님께 문자 발송 중`, 'loading');
-    addMessage(`네, ${name} 고객님께 문자 보낼게요.`, false);
-    await speak(`네, ${name} 고객님께 문자 보내겠습니다.`);
-    
-    setTimeout(() => {
-      addTimeline('📱', '문자 발송 완료', 'done');
-      addMessage(`${name} 고객님께 문자 보냈어요.`, false, {
-        type: 'sms',
-        data: { name, phone }
-      });
-    }, 1500);
-  };
-
-  // 이메일 실행
-  const executeEmail = async (name) => {
-    setIsTyping(false);
-    addTimeline('📧', `${name}님께 이메일 발송 중`, 'loading');
-    addMessage(`네, ${name} 고객님께 이메일 보낼게요.`, false);
-    await speak(`네, ${name} 고객님께 이메일 보내겠습니다.`);
-    
-    setTimeout(() => {
-      addTimeline('📧', '이메일 발송 완료', 'done');
-      addMessage(`${name} 고객님께 이메일 보냈어요.`, false, {
-        type: 'email',
-        data: { name, subject: '안내' }
-      });
-    }, 1500);
-  };
-
-  // 시트 실행
-  const executeSheet = async (name) => {
-    setIsTyping(false);
-    addTimeline('📊', '고객현황판 기록 중', 'loading');
-    addMessage(`네, 고객현황판에 기록할게요.`, false);
-    await speak(`네, 고객현황판에 기록하겠습니다.`);
-    
-    setTimeout(() => {
-      addTimeline('📊', '고객현황판 기록 완료', 'done');
-      addMessage(`고객현황판에 기록했어요.`, false, {
-        type: 'sheet',
-        data: { name: name || '', content: '기록 완료' }
-      });
-    }, 1500);
-  };
-
-  // 캘린더 실행
-  const executeCalendar = async (name) => {
-    setIsTyping(false);
-    addTimeline('📅', '캘린더 일정 등록 중', 'loading');
-    addMessage(`네, 캘린더에 일정 등록할게요.`, false);
-    await speak(`네, 캘린더에 일정 등록하겠습니다.`);
-    
-    setTimeout(() => {
-      addTimeline('📅', '캘린더 일정 등록 완료', 'done');
-      addMessage(`캘린더에 일정 등록했어요.`, false, {
-        type: 'calendar',
-        data: { date: '일정', title: name ? `${name} 고객 상담` : '일정' }
-      });
-    }, 1500);
+    if (isListening) {
+      setStatus('듣는중');
+      setTimeout(() => {
+        startRecognition();
+      }, 1000);
+    } else {
+      setStatus('대기중');
+    }
   };
 
   // 텍스트 전송
   const handleSend = () => {
     if (inputText.trim()) {
-      handleUserInput(inputText.trim());
+      processUserInput(inputText.trim());
       setInputText('');
     }
   };
@@ -659,6 +380,24 @@ function AgentPage() {
   // 엔터키
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') handleSend();
+  };
+
+  // 퀵버튼 핸들러
+  const handleQuickButton = (action) => {
+    switch(action) {
+      case 'call':
+        processUserInput('전화 걸어줘');
+        break;
+      case 'kakao':
+        processUserInput('카톡 보내줘');
+        break;
+      case 'sheet':
+        processUserInput('시트에 기록해줘');
+        break;
+      case 'calendar':
+        processUserInput('일정 등록해줘');
+        break;
+    }
   };
 
   // 통화 시간 포맷
@@ -698,7 +437,7 @@ function AgentPage() {
             <h2>안녕하세요, 지니입니다!</h2>
             <p>전화, 카톡, 문자, 일정관리까지<br/>제가 다 해드릴게요.</p>
             <p style={{fontSize: '12px', marginTop: '10px', opacity: 0.7}}>
-              "홍길동에게 전화해줘" 처럼 말씀해주세요
+              "홍길동 010-1234-5678 전화해줘"
             </p>
           </div>
         ) : (
@@ -712,55 +451,23 @@ function AgentPage() {
                 </div>
               </div>
               
-              {/* 확인 버튼 */}
-              {msg.buttons && pendingAction && (
-                <div className="confirm-buttons">
-                  {msg.buttons.map((btn, idx) => (
-                    <button
-                      key={idx}
-                      className={`confirm-btn ${btn.includes('예') ? 'yes' : 'no'}`}
-                      onClick={() => handleButtonClick(btn)}
-                    >
-                      {btn}
-                    </button>
-                  ))}
-                </div>
-              )}
-              
-              {/* 상태 카드 */}
               {msg.card && (
                 <div className="status-card">
                   <div className="card">
                     <div className="card-head">
-                      <div className={`card-icon ${msg.card.type}`}>
-                        {msg.card.type === 'call' && '📞'}
-                        {msg.card.type === 'kakao' && '💬'}
-                        {msg.card.type === 'sms' && '📱'}
-                        {msg.card.type === 'email' && '📧'}
-                        {msg.card.type === 'sheet' && '📊'}
-                        {msg.card.type === 'calendar' && '📅'}
-                      </div>
+                      <div className="card-icon call">📞</div>
                       <div className="card-title">
-                        <h4>
-                          {msg.card.type === 'call' && '전화 통화 완료'}
-                          {msg.card.type === 'kakao' && '카카오톡 발송 완료'}
-                          {msg.card.type === 'sms' && '문자 발송 완료'}
-                          {msg.card.type === 'email' && '이메일 발송 완료'}
-                          {msg.card.type === 'sheet' && '고객현황판 기록 완료'}
-                          {msg.card.type === 'calendar' && '캘린더 등록 완료'}
-                        </h4>
-                        {msg.card.data?.name && <span>{msg.card.data.name} 고객님</span>}
+                        <h4>전화 통화 완료</h4>
+                        <span>{msg.card.data.name}님</span>
                       </div>
                       <div className="card-status">완료</div>
                     </div>
-                    {msg.card.data?.duration && (
-                      <div className="card-body">
-                        <div className="card-row">
-                          <span className="l">통화시간</span>
-                          <span className="v">{msg.card.data.duration}</span>
-                        </div>
+                    <div className="card-body">
+                      <div className="card-row">
+                        <span className="l">통화시간</span>
+                        <span className="v">{msg.card.data.duration}</span>
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -791,22 +498,22 @@ function AgentPage() {
         )}
         
         <div className="quick-btns">
-          <button className="btn" onClick={() => handleUserInput('전화 걸어줘')}>
+          <button className="btn" onClick={() => handleQuickButton('call')}>
             📞<span>전화</span>
           </button>
-          <button className="btn" onClick={() => handleUserInput('카톡 보내줘')}>
+          <button className="btn" onClick={() => handleQuickButton('kakao')}>
             💬<span>카톡</span>
           </button>
           <button 
             className={`btn voice ${isListening ? 'active' : ''}`}
             onClick={isListening ? stopVoiceMode : startVoiceMode}
           >
-            {isListening ? '🔴' : '🎙️'}<span>{isListening ? '듣는중' : '보이스'}</span>
+            {isListening ? '🔴' : '🎙️'}<span>{isListening ? '중지' : '보이스'}</span>
           </button>
-          <button className="btn" onClick={() => handleUserInput('시트에 기록해줘')}>
+          <button className="btn" onClick={() => handleQuickButton('sheet')}>
             📊<span>시트</span>
           </button>
-          <button className="btn" onClick={() => handleUserInput('일정 등록해줘')}>
+          <button className="btn" onClick={() => handleQuickButton('calendar')}>
             📅<span>일정</span>
           </button>
         </div>
