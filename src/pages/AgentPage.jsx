@@ -26,7 +26,6 @@ function AgentPage() {
     }
   }, [messages]);
 
-  // 음성 합성 초기화 (성숙한 목소리 선택)
   useEffect(() => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.getVoices();
@@ -106,7 +105,7 @@ function AgentPage() {
     }
   };
 
-  // 음성 인식 시작 (긴 말 끝까지 듣기)
+  // 음성 인식 시작
   const startRecognition = () => {
     if (isSpeakingRef.current) {
       setTimeout(() => {
@@ -195,7 +194,7 @@ function AgentPage() {
     recognition.start();
   };
 
-  // 사용자 메시지 처리 (전화 감지 포함)
+  // 사용자 메시지 처리
   const processUserMessage = async (text) => {
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch(e) {}
@@ -204,6 +203,18 @@ function AgentPage() {
     addMessage(text, true);
     setStatus('생각중...');
     
+    // "지니야" 호출 감지 (지니야만 부른 경우)
+    if (text.includes('지니')) {
+      const withoutGenie = text.replace(/지니야?/g, '').trim();
+      if (withoutGenie.length < 5) {
+        const reply = '네, 대표님! 무엇을 도와드릴까요?';
+        addMessage(reply, false);
+        await speakGenie(reply);
+        return;
+      }
+    }
+    
+    // 전화 요청 감지
     if (text.includes('전화') || text.includes('콜') || text.includes('통화')) {
       const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
       const namePatterns = [
@@ -247,6 +258,7 @@ function AgentPage() {
       }
     }
     
+    // 일반 대화
     const reply = await askGenie(text);
     addMessage(reply, false);
     await speakGenie(reply);
@@ -282,7 +294,7 @@ function AgentPage() {
     window.speechSynthesis.cancel();
   };
 
-  // 전화 걸기 (UI 전환)
+  // 전화 걸기
   const makeCall = async (name, phone) => {
     stopVoiceMode();
     setStatus('전화 연결중...');
@@ -400,8 +412,8 @@ function AgentPage() {
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>🎙️ 버튼을 누르고 말씀해주세요.</p>
-            <p className="welcome-hint">"홍길동 010-1234-5678 전화해줘"</p>
+            <p>🎙️ 버튼을 누르고 "지니야" 불러주세요.</p>
+            <p className="welcome-hint">"지니야, 홍길동 010-1234-5678 전화해줘"</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -417,8 +429,10 @@ function AgentPage() {
 
       <div className="quick-actions">
         <button onClick={async () => {
-          addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
-          await speakGenie('네, 대표님! 무엇을 도와드릴까요?');
+          addMessage('지니야', true);
+          const reply = '네, 대표님! 무엇을 도와드릴까요?';
+          addMessage(reply, false);
+          await speakGenie(reply);
         }}>🧞 지니야</button>
         <button disabled={!currentCall} onClick={endCall}>📴 통화종료</button>
       </div>
