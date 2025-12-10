@@ -1,581 +1,313 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
+
+const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
 
 function AgentPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [status, setStatus] = useState('대기중');
-  const [timeline, setTimeline] = useState([]);
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [showCallPopup, setShowCallPopup] = useState(false);
-  const [callState, setCallState] = useState({ name: '', phone: '', duration: 0, status: '' });
-  const [isTyping, setIsTyping] = useState(false);
-  const [currentTranscript, setCurrentTranscript] = useState('');
-  
+  const [currentCall, setCurrentCall] = useState(null);
+  const chatAreaRef = useRef(null);
   const recognitionRef = useRef(null);
-  const callTimerRef = useRef(null);
-  const chatEndRef = useRef(null);
-  const isProcessingRef = useRef(false);
-  const accumulatedTextRef = useRef(''); // 누적 텍스트
-  const silenceTimerRef = useRef(null);
-  const isListeningRef = useRef(false);
-  
-  const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
-  const SILENCE_TIMEOUT = 2500; // 2.5초 무음 후 처리 (길게 설정)
+  const voiceModeRef = useRef(false);
+  const isSpeakingRef = useRef(false);
 
-  // 메시지 추가
-  const addMessage = (text, isUser = false, card = null) => {
-    const now = new Date();
-    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setMessages(prev => [...prev, { id: Date.now(), text, isUser, time, card }]);
+  useEffect(() => {
+    if (chatAreaRef.current) {
+      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const addMessage = (text, isUser) => {
+    setMessages(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      text,
+      isUser,
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    }]);
   };
 
-  // 타임라인 추가
-  const addTimeline = (icon, text, tlStatus = 'done') => {
-    setTimeline(prev => [...prev, { id: Date.now(), icon, text, status: tlStatus }]);
-  };
-
-  // TTS 음성 출력
-  const speak = (text) => {
+  // 지니 음성 응답 (말하는 동안 마이크 중지)
+  const speakGenie = (text) => {
     return new Promise((resolve) => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        
-        setTimeout(() => {
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'ko-KR';
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          
-          const voices = window.speechSynthesis.getVoices();
-          const koreanVoice = voices.find(v => v.lang.includes('ko'));
-          if (koreanVoice) utterance.voice = koreanVoice;
-          
-          utterance.onend = resolve;
-          utterance.onerror = resolve;
-          window.speechSynthesis.speak(utterance);
-        }, 100);
-      } else {
-        resolve();
+      // 마이크 일시 중지
+      isSpeakingRef.current = true;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch(e) {}
       }
+      
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ko-KR';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.2;
+      utterance.volume = 1.0;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const koreanVoice = voices.find(v => v.lang.includes('ko'));
+      if (koreanVoice) utterance.voice = koreanVoice;
+      
+      utterance.onend = () => {
+        isSpeakingRef.current = false;
+        resolve();
+      };
+      utterance.onerror = () => {
+        isSpeakingRef.current = false;
+        resolve();
+      };
+      
+      window.speechSynthesis.speak(utterance);
     });
   };
 
-  // 음성 인식 초기화
-  useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true; // 계속 듣기
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'ko-KR';
-
-      recognitionRef.current.onresult = (event) => {
-        if (isProcessingRef.current) return;
-        
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-
-        // 최종 인식된 텍스트 누적
-        if (finalTranscript) {
-          accumulatedTextRef.current += ' ' + finalTranscript;
-          accumulatedTextRef.current = accumulatedTextRef.current.trim();
-        }
-
-        // 화면에 표시 (누적 + 현재 인식중)
-        const displayText = (accumulatedTextRef.current + ' ' + interimTranscript).trim();
-        if (displayText) {
-          setCurrentTranscript(displayText);
-        }
-
-        // 무음 타이머 리셋 - 말할 때마다 타이머 재시작
-        if (silenceTimerRef.current) {
-          clearTimeout(silenceTimerRef.current);
-        }
-
-        // 2.5초 동안 추가 입력 없으면 처리 시작
-        silenceTimerRef.current = setTimeout(() => {
-          const fullText = accumulatedTextRef.current.trim();
-          if (fullText && isListeningRef.current && !isProcessingRef.current) {
-            processUserInput(fullText);
-            accumulatedTextRef.current = '';
-          }
-        }, SILENCE_TIMEOUT);
-      };
-
-      recognitionRef.current.onend = () => {
-        // 보이스 모드 중이면 다시 시작 (조용히)
-        if (isListeningRef.current && !isProcessingRef.current) {
-          setTimeout(() => {
-            if (isListeningRef.current && !isProcessingRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {}
-            }
-          }, 300);
-        }
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.log('음성 인식 오류:', event.error);
-        // 보이스 모드 중이면 다시 시작
-        if (isListeningRef.current && !isProcessingRef.current && event.error !== 'aborted') {
-          setTimeout(() => {
-            if (isListeningRef.current && !isProcessingRef.current) {
-              try {
-                recognitionRef.current.start();
-              } catch (e) {}
-            }
-          }, 1000);
-        }
-      };
-    }
-
-    // 음성 목록 로드
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.getVoices();
-    }
-
-    return () => {
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    };
-  }, []);
-
-  // 채팅 스크롤
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
-
-  // 보이스 모드 시작
-  const startVoiceMode = async () => {
-    isListeningRef.current = true;
-    isProcessingRef.current = false;
-    accumulatedTextRef.current = '';
-    
-    setIsListening(true);
-    setStatus('듣는중');
-    setCurrentTranscript('');
-    
-    // 시작 알림
-    await speak('네, 말씀하세요.');
-    
-    // 음성 인식 시작
-    setTimeout(() => {
-      if (recognitionRef.current && isListeningRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (e) {}
-      }
-    }, 300);
-  };
-
-  // 보이스 모드 종료
-  const stopVoiceMode = () => {
-    isListeningRef.current = false;
-    isProcessingRef.current = false;
-    accumulatedTextRef.current = '';
-    
-    setIsListening(false);
-    setStatus('대기중');
-    setCurrentTranscript('');
-    
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-    }
-    
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
-    
-    window.speechSynthesis.cancel();
-  };
-
-  // 사용자 입력 처리
-  const processUserInput = async (text) => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-    
-    // 음성 인식 일시 정지
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-    }
-    
-    addMessage(text, true);
-    setStatus('처리중');
-    setCurrentTranscript('');
-    setIsTyping(true);
-
-    // 키워드 분석
-    const lowerText = text.toLowerCase();
-    
-    // 전화 요청 감지
-    if (lowerText.includes('전화') || lowerText.includes('콜') || lowerText.includes('통화')) {
-      // 전화번호 추출
-      const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
-      // 이름 추출
-      const nameMatch = text.match(/([가-힣]{2,4})\s*(에게|한테|님|께|교수|선생|고객|씨)?/);
-      
-      const phone = phoneMatch ? phoneMatch[0] : '';
-      const name = nameMatch ? nameMatch[1] : '';
-      
-      if (phone || name) {
-        await executeCallDirect(name || '고객', phone);
-      } else {
-        setIsTyping(false);
-        const reply = '어느 분께 전화할까요? 이름이나 전화번호를 알려주세요.';
-        addMessage(reply, false);
-        await speak(reply);
-        finishProcessing();
-      }
-      return;
-    }
-    
-    // 일반 대화 - GPT-4o 호출
-    await chatWithGPT(text);
-  };
-
   // GPT-4o 대화
-  const chatWithGPT = async (text) => {
+  const askGenie = async (userMessage) => {
     try {
       const response = await fetch(`${RENDER_SERVER}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: userMessage })
       });
-      
       const data = await response.json();
-      const reply = data.reply || '네, 알겠습니다!';
-      
-      setIsTyping(false);
-      addMessage(reply, false);
-      await speak(reply);
-      
+      return data.reply || '죄송합니다, 다시 말씀해주세요.';
     } catch (error) {
       console.error('GPT 에러:', error);
-      setIsTyping(false);
-      addMessage('네, 무엇을 도와드릴까요?', false);
-      await speak('네, 무엇을 도와드릴까요?');
+      return '네, 대표님! 잠시 연결이 불안정합니다.';
     }
-    
-    finishProcessing();
   };
 
-  // 전화 바로 실행 (복명복창 후 바로 전화)
-  const executeCallDirect = async (name, phone) => {
-    setIsTyping(false);
-    
-    // 복명복창
-    const confirmMsg = phone 
-      ? `네, ${name}님(${phone})께 바로 전화하겠습니다.`
-      : `네, ${name}님께 바로 전화하겠습니다.`;
-    
-    addMessage(confirmMsg, false);
-    await speak(confirmMsg);
-    
-    if (!phone) {
-      addMessage('전화번호를 알려주세요.', false);
-      await speak('전화번호를 알려주세요.');
-      finishProcessing();
+  // 음성 인식 시작
+  const startRecognition = () => {
+    // 지니가 말하는 중이면 대기
+    if (isSpeakingRef.current) {
+      setTimeout(() => {
+        if (voiceModeRef.current) startRecognition();
+      }, 500);
       return;
     }
-    
-    // 전화 실행
-    addTimeline('📞', `${name}님께 전화 연결 중`, 'loading');
-    
-    // 보이스 모드 끄기
-    stopVoiceMode();
-    
-    setStatus('통화중');
-    setCallState({ name, phone, duration: 0, status: '연결중...' });
-    setShowCallPopup(true);
-    
-    let seconds = 0;
-    callTimerRef.current = setInterval(() => {
-      seconds++;
-      setCallState(prev => ({ ...prev, duration: seconds }));
-    }, 1000);
 
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('음성 인식을 지원하지 않는 브라우저입니다.');
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.lang = 'ko-KR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setStatus('듣는중...');
+    };
+
+    recognition.onresult = async (event) => {
+      const transcript = event.results[0][0].transcript.trim();
+      
+      if (transcript && !isSpeakingRef.current) {
+        console.log('인식됨:', transcript);
+        addMessage(`🗣️ ${transcript}`, true);
+        
+        setStatus('생각중...');
+        const reply = await askGenie(transcript);
+        
+        addMessage(`🧞 ${reply}`, false);
+        await speakGenie(reply);
+        
+        // 음성 응답 완료 후 다시 듣기
+        if (voiceModeRef.current) {
+          setTimeout(() => {
+            if (voiceModeRef.current && !isSpeakingRef.current) {
+              startRecognition();
+            }
+          }, 500);
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.log('음성 인식 에러:', event.error);
+      if (voiceModeRef.current && !isSpeakingRef.current && event.error !== 'aborted') {
+        setTimeout(() => {
+          if (voiceModeRef.current && !isSpeakingRef.current) {
+            startRecognition();
+          }
+        }, 1000);
+      }
+    };
+
+    recognition.onend = () => {
+      if (voiceModeRef.current && !isSpeakingRef.current) {
+        setTimeout(() => {
+          if (voiceModeRef.current && !isSpeakingRef.current) {
+            startRecognition();
+          }
+        }, 500);
+      } else if (!voiceModeRef.current) {
+        setStatus('대기중');
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  // 보이스 모드 시작
+  const startVoiceMode = () => {
+    voiceModeRef.current = true;
+    isSpeakingRef.current = false;
+    setIsVoiceMode(true);
+    setStatus('듣는중...');
+    addMessage('🎙️ 보이스 모드 시작 - 말씀하세요!', false);
+    startRecognition();
+  };
+
+  // 보이스 모드 종료
+  const stopVoiceMode = () => {
+    voiceModeRef.current = false;
+    isSpeakingRef.current = false;
+    setIsVoiceMode(false);
+    setStatus('대기중');
+    
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch(e) {}
+    }
+    window.speechSynthesis.cancel();
+    addMessage('🔇 보이스 모드 종료', false);
+  };
+
+  // 전화 걸기
+  const makeCall = async (name, phone) => {
+    setStatus('전화 연결중...');
+    addMessage(`📞 ${name}님께 전화 연결중...`, false);
+    await speakGenie(`${name}님께 전화를 연결합니다.`);
+    
     try {
-      const response = await fetch(`${RENDER_SERVER}/api/call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phone, customerName: name })
-      });
+      const formattedPhone = phone.replace(/[-\s]/g, '');
+      const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
+      const response = await fetch(`${RENDER_SERVER}/make-call?to=${fullPhone}`);
+      const data = await response.json();
       
-      const result = await response.json();
-      
-      if (result.success) {
-        setCallState(prev => ({ ...prev, status: '통화중' }));
-        addTimeline('📞', `${name}님과 통화 연결됨`, 'done');
+      if (data.success) {
+        setCurrentCall({ name, phone });
+        addMessage(`✅ ${name}님과 통화중`, false);
+        setStatus('통화중');
+        await speakGenie(`${name}님과 연결되었습니다.`);
       } else {
-        setCallState(prev => ({ ...prev, status: '연결 실패' }));
-        addTimeline('📞', '전화 연결 실패', 'done');
+        addMessage(`❌ 연결 실패: ${data.error}`, false);
+        setStatus('대기중');
       }
     } catch (error) {
-      console.error('전화 에러:', error);
-      setCallState(prev => ({ ...prev, status: '연결 실패' }));
+      addMessage('⏳ 서버 준비중...', false);
+      setStatus('대기중');
     }
-    
-    isProcessingRef.current = false;
   };
 
-  // 통화 종료
-  const endCall = async () => {
-    if (callTimerRef.current) clearInterval(callTimerRef.current);
-    
-    const { name, duration } = callState;
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
-    const durationStr = `${minutes}분 ${seconds}초`;
-    
-    setShowCallPopup(false);
-    
-    addTimeline('📞', `통화 완료 (${durationStr})`, 'done');
-    addMessage(`${name}님과 통화 완료! (${durationStr})`, false, {
-      type: 'call',
-      data: { name, duration: durationStr }
-    });
-    
-    await speak(`${name}님과 통화가 완료되었습니다.`);
-    setStatus('대기중');
-  };
-
-  // 처리 완료 후 다시 듣기
-  const finishProcessing = () => {
-    isProcessingRef.current = false;
-    accumulatedTextRef.current = '';
-    
-    if (isListeningRef.current) {
-      setStatus('듣는중');
-      setTimeout(() => {
-        if (isListeningRef.current && recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (e) {}
-        }
-      }, 500);
-    } else {
+  // 전화 종료
+  const endCall = () => {
+    if (currentCall) {
+      addMessage(`📴 ${currentCall.name}님과의 통화 종료`, false);
+      speakGenie('통화가 종료되었습니다.');
+      setCurrentCall(null);
       setStatus('대기중');
     }
   };
 
   // 텍스트 전송
-  const handleSend = () => {
-    if (inputText.trim()) {
-      processUserInput(inputText.trim());
-      setInputText('');
-    }
-  };
+  const handleSend = async () => {
+    if (!inputText.trim()) return;
+    const text = inputText;
+    setInputText('');
+    addMessage(`🗣️ ${text}`, true);
 
-  // 엔터키
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') handleSend();
-  };
-
-  // 퀵버튼 핸들러
-  const handleQuickButton = (action) => {
-    switch(action) {
-      case 'call':
-        processUserInput('전화 걸어줘');
-        break;
-      case 'kakao':
-        processUserInput('카톡 보내줘');
-        break;
-      case 'sheet':
-        processUserInput('시트에 기록해줘');
-        break;
-      case 'calendar':
-        processUserInput('일정 등록해줘');
-        break;
-    }
-  };
-
-  // 통화 시간 포맷
-  const formatDuration = (sec) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  // 상태 스타일
-  const getStatusStyle = () => {
-    switch (status) {
-      case '듣는중': return 'status listening';
-      case '처리중': return 'status processing';
-      case '통화중': return 'status calling';
-      default: return 'status';
-    }
+    setStatus('생각중...');
+    const reply = await askGenie(text);
+    addMessage(`🧞 ${reply}`, false);
+    setStatus('대기중');
+    await speakGenie(reply);
   };
 
   return (
     <div className="agent-page">
-      {/* 헤더 */}
-      <div className="agent-header">
-        <div className="avatar">🧞</div>
-        <div className="header-info">
-          <h1>AI 지니</h1>
-          <p>40만 보험설계사의 AI 비서</p>
+      <header className="agent-header">
+        <div className="header-left">
+          <div className="header-icon">🧞</div>
+          <div className="header-info">
+            <h1>AI 지니</h1>
+            <span className="header-subtitle">음성 비서</span>
+          </div>
         </div>
-        <button className={getStatusStyle()}>{status}</button>
-      </div>
+        <div className={`status-badge ${isVoiceMode ? 'voice-mode' : currentCall ? 'oncall' : ''}`}>
+          {status}
+        </div>
+      </header>
 
-      {/* 채팅 */}
-      <div className="chat-area">
+      {currentCall && (
+        <div className="call-banner">
+          <div className="call-info">
+            <span className="call-icon">📞</span>
+            <span>{currentCall.name}님과 통화중</span>
+          </div>
+          <button className="end-call-btn" onClick={endCall}>종료</button>
+        </div>
+      )}
+
+      {isVoiceMode && !currentCall && (
+        <div className="voice-banner">
+          <div className="voice-info">
+            <span className="voice-icon">🎙️</span>
+            <span>듣고 있어요</span>
+          </div>
+          <button className="stop-voice-btn" onClick={stopVoiceMode}>종료</button>
+        </div>
+      )}
+
+      <div className="chat-area" ref={chatAreaRef}>
         {messages.length === 0 ? (
-          <div className="welcome">
-            <div className="welcome-icon">🧞‍♂️</div>
+          <div className="welcome-message">
+            <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
-            <p>전화, 카톡, 문자, 일정관리까지<br/>제가 다 해드릴게요.</p>
-            <p style={{fontSize: '12px', marginTop: '10px', opacity: 0.7}}>
-              "홍길동 010-1234-5678 전화해줘"
-            </p>
+            <p>🎙️ 버튼을 누르고 말씀해주세요.</p>
           </div>
         ) : (
           messages.map((msg) => (
-            <div key={msg.id}>
-              <div className={`message ${msg.isUser ? 'user' : 'bot'}`}>
-                {!msg.isUser && <div className="msg-avatar">🧞</div>}
-                <div className="bubble">
-                  <p>{msg.text}</p>
-                  <span className="time">{msg.time}</span>
-                </div>
+            <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
+              <div className="message-content">
+                <p>{msg.text}</p>
+                <span className="message-time">{msg.time}</span>
               </div>
-              
-              {msg.card && (
-                <div className="status-card">
-                  <div className="card">
-                    <div className="card-head">
-                      <div className="card-icon call">📞</div>
-                      <div className="card-title">
-                        <h4>전화 통화 완료</h4>
-                        <span>{msg.card.data.name}님</span>
-                      </div>
-                      <div className="card-status">완료</div>
-                    </div>
-                    <div className="card-body">
-                      <div className="card-row">
-                        <span className="l">통화시간</span>
-                        <span className="v">{msg.card.data.duration}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           ))
         )}
-        
-        {isTyping && (
-          <div className="typing">
-            <div className="msg-avatar">🧞</div>
-            <div className="dots">
-              <div className="dot"></div>
-              <div className="dot"></div>
-              <div className="dot"></div>
-            </div>
-          </div>
-        )}
-        
-        <div ref={chatEndRef} />
       </div>
 
-      {/* 입력 영역 */}
+      <div className="quick-actions">
+        <button onClick={async () => {
+          addMessage('🧞 네, 대표님! 무엇을 도와드릴까요?', false);
+          await speakGenie('네, 대표님! 무엇을 도와드릴까요?');
+        }}>🧞 지니야</button>
+        <button disabled={!currentCall} onClick={endCall}>📴 종료</button>
+      </div>
+
       <div className="input-area">
-        {isListening && currentTranscript && (
-          <div className="current-transcript">
-            🎤 {currentTranscript}
-          </div>
-        )}
-        
-        <div className="quick-btns">
-          <button className="btn" onClick={() => handleQuickButton('call')}>
-            📞<span>전화</span>
-          </button>
-          <button className="btn" onClick={() => handleQuickButton('kakao')}>
-            💬<span>카톡</span>
-          </button>
-          <button 
-            className={`btn voice ${isListening ? 'active' : ''}`}
-            onClick={isListening ? stopVoiceMode : startVoiceMode}
-          >
-            {isListening ? '🔴' : '🎙️'}<span>{isListening ? '중지' : '보이스'}</span>
-          </button>
-          <button className="btn" onClick={() => handleQuickButton('sheet')}>
-            📊<span>시트</span>
-          </button>
-          <button className="btn" onClick={() => handleQuickButton('calendar')}>
-            📅<span>일정</span>
-          </button>
-        </div>
-        <div className="input-row">
-          <input
-            type="text"
-            placeholder="지니야, 무엇을 도와드릴까요?"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={handleKeyPress}
-          />
-          <button className="send-btn" onClick={handleSend}>➤</button>
-        </div>
+        <button 
+          className={`voice-btn ${isVoiceMode ? 'active' : ''}`}
+          onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
+        >
+          {isVoiceMode ? '🔴' : '🎙️'}
+        </button>
+        <input
+          type="text"
+          placeholder="지니야..."
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+        />
+        <button className="send-btn" onClick={handleSend}>➤</button>
       </div>
-
-      {/* 타임라인 */}
-      <div className={`timeline ${timelineOpen ? 'open' : ''}`}>
-        <div className="tl-head" onClick={() => setTimelineOpen(!timelineOpen)}>
-          <div className="tl-title">
-            <span>📋 작업 기록</span>
-            <span className="tl-badge">{timeline.length}</span>
-          </div>
-          <span className="tl-toggle">▼</span>
-        </div>
-        {timelineOpen && (
-          <div className="tl-content">
-            {timeline.map((item) => (
-              <div key={item.id} className="tl-item">
-                <div className="tl-icon">{item.icon}</div>
-                <span className="tl-text">{item.text}</span>
-                <span className={`tl-status ${item.status}`}>
-                  {item.status === 'loading' ? '진행중' : '완료'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 통화 팝업 */}
-      {showCallPopup && (
-        <div className="call-popup">
-          <div className="call-popup-box">
-            <div className="call-info">
-              <div className="call-avatar">👤</div>
-              <div className="call-name">{callState.name}</div>
-              <div className="call-phone">{callState.phone}</div>
-              <div className="call-state">{callState.status}</div>
-              <div className="call-timer">{formatDuration(callState.duration)}</div>
-            </div>
-            <div className="call-btns">
-              <button className="call-btn mute">🔇</button>
-              <button className="call-btn end" onClick={endCall}>📞</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
