@@ -76,7 +76,7 @@ function AgentPage() {
             startRecognition();
           }
           resolve();
-        }, 1000);
+        }, 2000);
       };
       utterance.onerror = () => {
         isSpeakingRef.current = false;
@@ -85,7 +85,7 @@ function AgentPage() {
             startRecognition();
           }
           resolve();
-        }, 1000);
+        }, 2000);
       };
       
       window.speechSynthesis.speak(utterance);
@@ -171,7 +171,7 @@ function AgentPage() {
           transcriptRef.current = '';
           setCurrentTranscript('');
         }
-      }, 1000);
+      }, 2000);
     };
 
     recognition.onerror = (event) => {
@@ -181,7 +181,7 @@ function AgentPage() {
           if (voiceModeRef.current && !isSpeakingRef.current) {
             startRecognition();
           }
-        }, 1000);
+        }, 2000);
       }
     };
 
@@ -320,7 +320,7 @@ function AgentPage() {
         // 통화 시간 카운터
         callTimerRef.current = setInterval(() => {
           setCallDuration(prev => prev + 1);
-        }, 1000);
+        }, 2000);
         
         addMessage(`📞 ${name}님과 통화 연결됨`, false);
       } else {
