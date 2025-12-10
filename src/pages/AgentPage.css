@@ -370,3 +370,12 @@
     border-right: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
+/* 실시간 자막 배너 */
+.transcript-banner {
+  background: rgba(102, 126, 234, 0.9);
+  color: white;
+  padding: 12px 20px;
+  font-size: 14px;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
