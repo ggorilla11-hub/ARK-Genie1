@@ -352,52 +352,46 @@ function AgentPage() {
   const makeCall = async (name, phone, purpose = '상담 일정 예약') => {
     console.log('📞 [Realtime API] 전화 걸기:', name, phone, purpose);
     
-    // 🆕 먼저 메시지 표시 (음성 모드 종료 전)
-    addMessage(`📞 ${name}님께 전화합니다.`, false);
+    stopVoiceMode();
     setStatus('전화 연결중...');
     
-    // 🆕 1초 후에 음성 모드 종료 및 전화 발신 (지니 응답 재생 시간 확보)
-    setTimeout(async () => {
-      stopVoiceMode();
+    try {
+      const formattedPhone = phone.replace(/[-\s]/g, '');
+      const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
       
-      try {
-        const formattedPhone = phone.replace(/[-\s]/g, '');
-        const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
+      // 🆕 새로운 Realtime API 엔드포인트 사용
+      const response = await fetch(`${RENDER_SERVER}/api/call-realtime`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          to: fullPhone, 
+          customerName: name,
+          purpose: purpose  // 🆕 전화 목적 추가
+        })
+      });
+      const data = await response.json();
       
-        // 🆕 새로운 Realtime API 엔드포인트 사용
-        const response = await fetch(`${RENDER_SERVER}/api/call-realtime`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            to: fullPhone, 
-            customerName: name,
-            purpose: purpose  // 🆕 전화 목적 추가
-          })
-        });
-        const data = await response.json();
+      console.log('📞 API 응답:', data);
+      
+      if (data.success) {
+        setCurrentCall({ name, phone, callSid: data.callSid, purpose });
+        setCallDuration(0);
+        setStatus('통화중');
         
-        console.log('📞 API 응답:', data);
+        callTimerRef.current = setInterval(() => {
+          setCallDuration(prev => prev + 1);
+        }, 1000);
         
-        if (data.success) {
-          setCurrentCall({ name, phone, callSid: data.callSid, purpose });
-          setCallDuration(0);
-          setStatus('통화중');
-          
-          callTimerRef.current = setInterval(() => {
-            setCallDuration(prev => prev + 1);
-          }, 1000);
-          
-          addMessage(`📞 ${name}님께 전화 연결중...`, false);
-        } else {
-          addMessage(`❌ 연결 실패: ${data.error}`, false);
-          setStatus('대기중');
-        }
-      } catch (error) {
-        console.error('전화 에러:', error);
-        addMessage('⏳ 잠시 후 다시 시도해주세요.', false);
+        addMessage(`📞 ${name}님께 ${purpose} 목적으로 전화 연결됨 (AI 대화)`, false);
+      } else {
+        addMessage(`❌ 연결 실패: ${data.error}`, false);
         setStatus('대기중');
       }
-    }, 1000);  // 1초 지연
+    } catch (error) {
+      console.error('전화 에러:', error);
+      addMessage('⏳ 잠시 후 다시 시도해주세요.', false);
+      setStatus('대기중');
+    }
   };
 
   // 전화 종료
