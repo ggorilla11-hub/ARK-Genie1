@@ -24,12 +24,14 @@ function AgentPage() {
   const isConnectedRef = useRef(false);
   const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
 
-  // 스크롤 자동 이동 (강화됨)
+  // 스크롤 자동 이동 (scrollIntoView 방식)
+  const messagesEndRef = useRef(null);
+  
   useEffect(() => {
-    // 여러 번 시도하여 확실하게 스크롤
+    // scrollIntoView로 확실하게 스크롤
     const scrollToBottom = () => {
-      if (chatAreaRef.current) {
-        chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     };
     
@@ -279,6 +281,8 @@ function AgentPage() {
                 const callInfo = lastCallInfoRef.current;
                 lastCallInfoRef.current = null; // 사용 후 초기화
                 setPendingCall(null);
+                // 🆕 최종 복창 후 전화 발신
+                addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
                 console.log('📞 [DEBUG] makeCall 호출 시작');
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
                 console.log('📞 [DEBUG] makeCall 호출 완료');
@@ -488,6 +492,8 @@ function AgentPage() {
         console.log('✅ 전화 승인됨 (텍스트):', pendingCall);
         const callInfo = pendingCall;
         setPendingCall(null);
+        // 🆕 최종 복창 후 전화 발신
+        addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
         await makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
         return;
       } else if (checkRejection(text)) {
@@ -597,6 +603,8 @@ function AgentPage() {
             </div>
           ))
         )}
+        {/* 스크롤 타겟 */}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="quick-actions">
