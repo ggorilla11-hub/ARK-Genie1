@@ -212,6 +212,11 @@ function AgentPage() {
 
   // 보이스 모드 시작
   const startVoiceMode = async () => {
+    // 🆕 통화 중이면 음성모드 시작 금지
+    if (currentCall) {
+      console.log('⚠️ 통화 중에는 음성모드 시작 불가');
+      return;
+    }
     if (isConnectedRef.current) return;
     
     try {
@@ -559,7 +564,7 @@ function AgentPage() {
       </div>
 
       <div className="quick-actions">
-        <button onClick={() => { if (!isVoiceMode) startVoiceMode(); }}>🧞 지니야</button>
+        <button onClick={() => { if (!isVoiceMode && !currentCall) startVoiceMode(); }} disabled={!!currentCall}>🧞 지니야</button>
         <button disabled={!currentCall} onClick={endCall}>📴 통화종료</button>
       </div>
 
@@ -567,6 +572,7 @@ function AgentPage() {
         <button 
           className={`voice-btn ${isVoiceMode ? 'active' : ''}`}
           onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
+          disabled={!!currentCall}
         >
           {isVoiceMode ? '🔴' : '🎙️'}
         </button>
