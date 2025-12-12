@@ -299,11 +299,83 @@
 
 .input-area {
   display: flex;
-  gap: 10px;
-  padding: 16px 20px 24px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 20px 24px;
   background: #1e1e2e;
   border-top: 1px solid rgba(255,255,255,0.1);
   flex-shrink: 0;
+}
+
+/* 🆕 상단 버튼 행 */
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.action-btn {
+  flex: 1;
+  max-width: 100px;
+  height: 55px;
+  border-radius: 14px;
+  border: none;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.voice {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  max-width: 110px;
+}
+
+.action-btn.voice.active {
+  background: #ef4444;
+  animation: pulse 1s infinite;
+}
+
+.action-icon {
+  font-size: 22px;
+}
+
+.action-label {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* 🆕 하단 입력 행 */
+.input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.input-row input {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 26px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 15px;
+}
+
+.input-row input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
+.input-row input:disabled {
+  opacity: 0.5;
 }
 
 .voice-btn {
