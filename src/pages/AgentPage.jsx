@@ -13,6 +13,7 @@ function AgentPage() {
   const [callDuration, setCallDuration] = useState(0);
   const [pendingCall, setPendingCall] = useState(null); // 승인 대기 중인 전화
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🆕 파일 분석 중 상태
+  const [showFileMenu, setShowFileMenu] = useState(false); // 🆕 파일 하위 메뉴 표시
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -25,6 +26,8 @@ function AgentPage() {
   const isConnectedRef = useRef(false);
   const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
   const muteServerAudioRef = useRef(false); // 🆕 서버 음성 차단 플래그
+  const cameraInputRef = useRef(null); // 🆕 카메라 입력 ref
+  const imageInputRef = useRef(null); // 🆕 이미지 입력 ref
   const fileInputRef = useRef(null); // 🆕 파일 입력 ref
 
   // 스크롤 자동 이동 (scrollIntoView 방식)
@@ -99,36 +102,55 @@ function AgentPage() {
     }]);
   };
 
-  // 🆕 파일 선택 핸들러
+  // 🆕 파일 선택 핸들러 - 이미지, PDF, 문서 모두 지원
   const handleFileSelect = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     
-    // 이미지 파일 확인
-    if (!file.type.startsWith('image/')) {
-      alert('이미지 파일만 업로드 가능합니다.');
+    // 지원 파일 형식 확인
+    const supportedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/haansofthwp', 'application/x-hwp',
+      'text/plain'
+    ];
+    
+    const isImage = file.type.startsWith('image/');
+    const isPDF = file.type === 'application/pdf';
+    const isSupported = supportedTypes.some(type => file.type.includes(type.split('/')[1])) || isImage || isPDF;
+    
+    if (!isSupported && !file.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|pdf|doc|docx|xls|xlsx|hwp|txt)$/i)) {
+      alert('지원하지 않는 파일 형식입니다.\n\n지원 형식: 이미지(JPG, PNG), PDF, Word, Excel, HWP, TXT');
       return;
     }
     
-    // 파일 크기 제한 (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('파일 크기는 10MB 이하여야 합니다.');
+    // 파일 크기 제한 (20MB로 확대)
+    if (file.size > 20 * 1024 * 1024) {
+      alert('파일 크기는 20MB 이하여야 합니다.');
       return;
     }
     
     try {
-      // 이미지를 base64로 변환
+      // 파일을 base64로 변환
       const base64 = await fileToBase64(file);
+      const fileName = file.name;
+      const fileType = isImage ? 'image' : (isPDF ? 'pdf' : 'document');
       
-      // 대화창에 이미지 표시
-      addMessage('📎 이미지를 업로드했습니다. 분석 중...', true, base64);
+      // 대화창에 파일 정보 표시
+      if (isImage) {
+        addMessage(`📎 이미지를 업로드했습니다: ${fileName}\n분석 중...`, true, base64);
+      } else {
+        addMessage(`📎 파일을 업로드했습니다: ${fileName}\n분석 중...`, true, null);
+      }
       
       // 분석 시작
       setIsAnalyzing(true);
       setStatus('분석중...');
       
-      // GPT-4o Vision API로 분석 요청
-      const analysis = await analyzeImage(base64);
+      // API로 분석 요청 (파일 타입 정보 포함)
+      const analysis = await analyzeFile(base64, fileName, fileType);
       
       // 분석 결과 표시
       addMessage(analysis, false);
@@ -156,13 +178,17 @@ function AgentPage() {
     });
   };
 
-  // 🆕 GPT-4o Vision API로 이미지 분석
-  const analyzeImage = async (base64Image) => {
+  // 🆕 파일 분석 API (이미지, PDF, 문서 모두 지원)
+  const analyzeFile = async (base64Data, fileName, fileType) => {
     try {
-      const response = await fetch(`${RENDER_SERVER}/api/analyze-image`, {
+      const response = await fetch(`${RENDER_SERVER}/api/analyze-file`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image })
+        body: JSON.stringify({ 
+          file: base64Data,
+          fileName: fileName,
+          fileType: fileType
+        })
       });
       
       const data = await response.json();
@@ -173,7 +199,7 @@ function AgentPage() {
         return `❌ 분석 실패: ${data.error}`;
       }
     } catch (error) {
-      console.error('이미지 분석 API 에러:', error);
+      console.error('파일 분석 API 에러:', error);
       return '❌ 서버 연결 오류. 잠시 후 다시 시도해주세요.';
     }
   };
@@ -726,22 +752,78 @@ function AgentPage() {
       </div>
 
       <div className="input-area">
-        {/* 🆕 숨겨진 파일 입력 */}
+        {/* 🆕 숨겨진 파일 입력들 */}
         <input
           type="file"
-          ref={fileInputRef}
+          ref={cameraInputRef}
           onChange={handleFileSelect}
           accept="image/*"
           capture="environment"
           style={{ display: 'none' }}
         />
+        <input
+          type="file"
+          ref={imageInputRef}
+          onChange={handleFileSelect}
+          accept="image/*"
+          style={{ display: 'none' }}
+        />
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.hwp,.txt"
+          style={{ display: 'none' }}
+        />
+        
+        {/* 🆕 파일 하위 메뉴 (펼쳐졌을 때) */}
+        {showFileMenu && (
+          <div className="file-submenu">
+            <button 
+              className="submenu-btn"
+              onClick={() => {
+                cameraInputRef.current?.click();
+                setShowFileMenu(false);
+              }}
+            >
+              <span>📷</span>
+              <span>사진촬영</span>
+            </button>
+            <button 
+              className="submenu-btn"
+              onClick={() => {
+                imageInputRef.current?.click();
+                setShowFileMenu(false);
+              }}
+            >
+              <span>🖼️</span>
+              <span>사진/이미지</span>
+            </button>
+            <button 
+              className="submenu-btn"
+              onClick={() => {
+                fileInputRef.current?.click();
+                setShowFileMenu(false);
+              }}
+            >
+              <span>📁</span>
+              <span>파일첨부</span>
+            </button>
+            <button 
+              className="submenu-close"
+              onClick={() => setShowFileMenu(false)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         
         {/* 🆕 상단 버튼 행: 파일, 보이스, 녹음 */}
         <div className="action-buttons">
           <button 
-            className="action-btn" 
+            className={`action-btn ${showFileMenu ? 'active' : ''}`}
             disabled={!!currentCall || isVoiceMode || isAnalyzing}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => setShowFileMenu(!showFileMenu)}
           >
             <span className="action-icon">📎</span>
             <span className="action-label">파일</span>
