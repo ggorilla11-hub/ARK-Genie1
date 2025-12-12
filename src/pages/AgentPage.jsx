@@ -300,6 +300,30 @@ function AgentPage() {
           if (msg.type === 'transcript' && msg.role === 'assistant') {
             console.log('🤖 [DEBUG] 지니 응답:', msg.text);
             addMessage(msg.text, false);
+            
+            // 🆕 "전화합니다" 감지하면 전화 발신
+            if (msg.text.includes('전화합니다')) {
+              console.log('📞 [DEBUG] "전화합니다" 감지!');
+              console.log('📞 [DEBUG] pendingCall 상태:', pendingCall);
+              
+              // pendingCall이 있으면 사용, 없으면 텍스트에서 추출
+              if (pendingCall) {
+                console.log('📞 [DEBUG] pendingCall로 전화 발신:', pendingCall);
+                const callInfo = pendingCall;
+                setPendingCall(null);
+                makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
+              } else {
+                // pendingCall이 없으면 텍스트에서 정보 추출 시도
+                const phoneMatch = msg.text.match(/(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})/);
+                const nameMatch = msg.text.match(/([가-힣]{2,4})님/);
+                if (phoneMatch) {
+                  const phone = phoneMatch[1];
+                  const name = nameMatch ? nameMatch[1] : '고객';
+                  console.log('📞 [DEBUG] 텍스트에서 추출하여 전화 발신:', name, phone);
+                  makeCall(name, phone, '상담 일정 예약');
+                }
+              }
+            }
           }
           
           if (msg.type === 'interrupt') {
