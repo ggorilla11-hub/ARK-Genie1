@@ -1,5 +1,7 @@
 .agent-page {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
   display: flex;
   flex-direction: column;
@@ -12,6 +14,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -72,6 +75,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .voice-info {
@@ -102,6 +106,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .call-info {
@@ -133,13 +138,55 @@
   cursor: pointer;
 }
 
+/* 🆕 전화 승인 대기 배너 */
+.pending-call-banner {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pending-info {
+  color: white;
+  font-weight: 600;
+}
+
+.pending-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.approve-btn {
+  background: #22c55e;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reject-btn {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .chat-area {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 
 .welcome-message {
@@ -226,6 +273,7 @@
   padding: 12px 20px;
   justify-content: center;
   background: rgba(0,0,0,0.2);
+  flex-shrink: 0;
 }
 
 .quick-actions button {
@@ -255,6 +303,7 @@
   padding: 16px 20px 24px;
   background: #1e1e2e;
   border-top: 1px solid rgba(255,255,255,0.1);
+  flex-shrink: 0;
 }
 
 .voice-btn {
@@ -274,6 +323,11 @@
 .voice-btn.active {
   background: #ef4444;
   animation: pulse 1s infinite;
+}
+
+.voice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .input-area input {
