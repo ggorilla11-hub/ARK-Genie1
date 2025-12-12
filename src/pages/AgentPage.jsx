@@ -55,42 +55,36 @@ function AgentPage() {
     };
   }, []);
 
-  // 통화 상태 폴링 (자동 종료 감지) - 🆕 개선: 1.5초 간격, 즉시 시작
+  // 통화 상태 폴링 (자동 종료 감지)
   useEffect(() => {
     if (!currentCall?.callSid) return;
     
-    const callSid = currentCall.callSid;
-    const customerName = currentCall.name || '고객';
-    
     const pollStatus = async () => {
       try {
-        console.log('🔍 [폴링] 통화 상태 확인:', callSid);
-        const response = await fetch(`${RENDER_SERVER}/api/call-status/${callSid}`);
+        const response = await fetch(`${RENDER_SERVER}/api/call-status/${currentCall.callSid}`);
         const data = await response.json();
-        console.log('📊 [폴링] 상태:', data.status);
         
         if (data.status === 'completed' || data.status === 'failed' || data.status === 'busy' || data.status === 'no-answer') {
           // 통화 종료됨
-          console.log('✅ [폴링] 통화 종료 감지! UI 업데이트');
           if (callTimerRef.current) {
             clearInterval(callTimerRef.current);
             callTimerRef.current = null;
           }
+          const name = currentCall?.name || '고객';
+          const duration = formatDuration(callDuration);
           setCurrentCall(null);
           setCallDuration(0);
           setStatus('대기중');
-          addMessage(`📴 ${customerName}님 통화 종료`, false);
+          addMessage(`📴 ${name}님 통화 종료 (${duration})`, false);
         }
       } catch (e) {
         console.error('통화 상태 조회 에러:', e);
       }
     };
     
-    // 🆕 즉시 한 번 실행 + 1.5초 간격으로 폴링
-    pollStatus();
-    const intervalId = setInterval(pollStatus, 1500);
+    const intervalId = setInterval(pollStatus, 3000);
     return () => clearInterval(intervalId);
-  }, [currentCall?.callSid]); // 🆕 callSid만 dependency로
+  }, [currentCall, callDuration]);
 
   const addMessage = (text, isUser) => {
     setMessages(prev => [...prev, {
