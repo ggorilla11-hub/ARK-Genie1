@@ -23,11 +23,15 @@ function AgentPage() {
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
 
-  // 스크롤 자동 이동
+  // 스크롤 자동 이동 (개선됨)
   useEffect(() => {
-    if (chatAreaRef.current) {
-      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
-    }
+    // 약간의 지연 후 스크롤 (렌더링 완료 보장)
+    const timer = setTimeout(() => {
+      if (chatAreaRef.current) {
+        chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages]);
 
   // 컴포넌트 언마운트 시 정리
