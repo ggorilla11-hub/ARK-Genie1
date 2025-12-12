@@ -533,3 +533,23 @@
 .call-end-btn:hover {
   background: #dc2626;
 }
+
+/* 🆕 메시지 이미지 스타일 */
+.message-image {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  object-fit: cover;
+}
+
+.message-image:hover {
+  opacity: 0.9;
+}
+
+/* 분석 중 상태 */
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
