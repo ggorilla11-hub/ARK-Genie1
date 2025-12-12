@@ -621,6 +621,16 @@
   color: white;
 }
 
+/* 🆕 v15: 초기화 버튼 스타일 */
+.submenu-clear {
+  background: rgba(255, 100, 100, 0.2);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+.submenu-clear:hover {
+  background: rgba(255, 100, 100, 0.3);
+}
+
 .action-btn.active {
   background: linear-gradient(135deg, #667eea, #764ba2);
 }
