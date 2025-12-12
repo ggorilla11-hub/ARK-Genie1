@@ -625,22 +625,38 @@ function AgentPage() {
       </div>
 
       <div className="input-area">
-        <button 
-          className={`voice-btn ${isVoiceMode ? 'active' : ''}`}
-          onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
-          disabled={!!currentCall}
-        >
-          {isVoiceMode ? '🔴' : '🎙️'}
-        </button>
-        <input
-          type="text"
-          placeholder="텍스트로 입력..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          disabled={isVoiceMode}
-        />
-        <button className="send-btn" onClick={handleSend} disabled={isVoiceMode}>➤</button>
+        {/* 🆕 상단 버튼 행: 파일, 보이스, 녹음 */}
+        <div className="action-buttons">
+          <button className="action-btn" disabled={!!currentCall || isVoiceMode}>
+            <span className="action-icon">📎</span>
+            <span className="action-label">파일</span>
+          </button>
+          <button 
+            className={`action-btn voice ${isVoiceMode ? 'active' : ''}`}
+            onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
+            disabled={!!currentCall}
+          >
+            <span className="action-icon">{isVoiceMode ? '🔴' : '🎤'}</span>
+            <span className="action-label">보이스</span>
+          </button>
+          <button className="action-btn" disabled={!!currentCall || isVoiceMode}>
+            <span className="action-icon">🔴</span>
+            <span className="action-label">녹음</span>
+          </button>
+        </div>
+        
+        {/* 하단 입력 행 */}
+        <div className="input-row">
+          <input
+            type="text"
+            placeholder="텍스트로 입력..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            disabled={isVoiceMode}
+          />
+          <button className="send-btn" onClick={handleSend} disabled={isVoiceMode}>➤</button>
+        </div>
       </div>
     </div>
   );
