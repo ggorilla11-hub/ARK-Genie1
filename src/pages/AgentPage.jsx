@@ -22,6 +22,7 @@ function AgentPage() {
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
+  const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
 
   // 스크롤 자동 이동 (개선됨)
   useEffect(() => {
@@ -289,7 +290,8 @@ function AgentPage() {
               console.log('📞 [DEBUG] 전화 명령 감지! setPendingCall 호출:', callInfo);
               // 바로 전화하지 않고 승인 대기
               setPendingCall(callInfo);
-              console.log('📞 [DEBUG] setPendingCall 완료, 메시지 추가');
+              lastCallInfoRef.current = callInfo; // 🆕 즉시 접근 가능하도록 ref에도 저장
+              console.log('📞 [DEBUG] setPendingCall + lastCallInfoRef 완료');
               // 지니가 복명복창 (3초 후 자동 전화 대신 승인 대기)
               addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
               console.log('📞 [DEBUG] 복명복창 메시지 추가 완료');
@@ -304,24 +306,17 @@ function AgentPage() {
             // 🆕 "전화합니다" 감지하면 전화 발신
             if (msg.text.includes('전화합니다')) {
               console.log('📞 [DEBUG] "전화합니다" 감지!');
-              console.log('📞 [DEBUG] pendingCall 상태:', pendingCall);
+              console.log('📞 [DEBUG] lastCallInfoRef:', lastCallInfoRef.current);
               
-              // pendingCall이 있으면 사용, 없으면 텍스트에서 추출
-              if (pendingCall) {
-                console.log('📞 [DEBUG] pendingCall로 전화 발신:', pendingCall);
-                const callInfo = pendingCall;
+              // lastCallInfoRef 사용 (즉시 접근 가능)
+              if (lastCallInfoRef.current) {
+                console.log('📞 [DEBUG] lastCallInfoRef로 전화 발신:', lastCallInfoRef.current);
+                const callInfo = lastCallInfoRef.current;
+                lastCallInfoRef.current = null; // 사용 후 초기화
                 setPendingCall(null);
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
               } else {
-                // pendingCall이 없으면 텍스트에서 정보 추출 시도
-                const phoneMatch = msg.text.match(/(\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4})/);
-                const nameMatch = msg.text.match(/([가-힣]{2,4})님/);
-                if (phoneMatch) {
-                  const phone = phoneMatch[1];
-                  const name = nameMatch ? nameMatch[1] : '고객';
-                  console.log('📞 [DEBUG] 텍스트에서 추출하여 전화 발신:', name, phone);
-                  makeCall(name, phone, '상담 일정 예약');
-                }
+                console.log('⚠️ [DEBUG] lastCallInfoRef가 없음!');
               }
             }
           }
