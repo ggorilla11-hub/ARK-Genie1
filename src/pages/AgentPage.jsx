@@ -23,8 +23,14 @@ function AgentPage() {
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
+  const pendingCallRef = useRef(null); // 🆕 pendingCall을 ref로도 유지
 
-  // 🆕 스크롤 함수 개선
+  // 🆕 pendingCall 변경 시 ref도 업데이트
+  useEffect(() => {
+    pendingCallRef.current = pendingCall;
+    console.log('📌 pendingCall 상태:', pendingCall);
+  }, [pendingCall]);
+
   const scrollToBottom = () => {
     setTimeout(() => {
       if (messagesEndRef.current) {
@@ -36,7 +42,6 @@ function AgentPage() {
     }, 100);
   };
 
-  // 🆕 메시지 변경 시 스크롤
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -77,7 +82,6 @@ function AgentPage() {
     return () => clearInterval(intervalId);
   }, [currentCall, callDuration]);
 
-  // 🆕 메시지 추가 후 스크롤
   const addMessage = (text, isUser) => {
     setMessages(prev => {
       const newMessages = [...prev, {
@@ -88,7 +92,6 @@ function AgentPage() {
       }];
       return newMessages;
     });
-    // 메시지 추가 직후 스크롤
     setTimeout(scrollToBottom, 50);
   };
 
@@ -202,14 +205,27 @@ function AgentPage() {
     return { name, phone, purpose };
   };
 
+  // 🆕 승인 체크 강화
   const checkApproval = (text) => {
-    const approvalWords = ['그래', '응', '어', '해줘', '해주세요', '진행', '네', '좋아', '알았어', '오케이', 'ok', '걸어', '전화해'];
-    const lowerText = text.toLowerCase();
-    return approvalWords.some(word => lowerText.includes(word));
+    const approvalWords = ['그래', '응', '어', '해줘', '해주세요', '진행', '네', '좋아', '알았어', '오케이', 'ok', '걸어', '전화해', '해', '웅', '넹', '예', '부탁'];
+    const lowerText = text.toLowerCase().trim();
+    
+    // 정확히 일치하는 경우 (짧은 응답)
+    if (approvalWords.includes(lowerText)) {
+      console.log('✅ 정확한 승인 감지:', lowerText);
+      return true;
+    }
+    
+    // 포함하는 경우
+    const found = approvalWords.some(word => lowerText.includes(word));
+    if (found) {
+      console.log('✅ 승인 단어 포함 감지:', lowerText);
+    }
+    return found;
   };
 
   const checkRejection = (text) => {
-    const rejectionWords = ['아니', '취소', '안해', '하지마', '됐어', '그만'];
+    const rejectionWords = ['아니', '취소', '안해', '하지마', '됐어', '그만', '안 해', '하지 마'];
     return rejectionWords.some(word => text.includes(word));
   };
 
@@ -251,24 +267,32 @@ function AgentPage() {
           if (msg.type === 'transcript' && msg.role === 'user') {
             addMessage(msg.text, true);
             
-            if (pendingCall) {
+            // 🆕 ref를 사용하여 pendingCall 확인
+            const currentPendingCall = pendingCallRef.current;
+            console.log('🔍 음성 입력:', msg.text, '| pendingCall:', currentPendingCall);
+            
+            if (currentPendingCall) {
               if (checkApproval(msg.text)) {
-                console.log('✅ 전화 승인됨:', pendingCall);
-                const callInfo = pendingCall;
+                console.log('✅ 전화 승인됨 (음성):', currentPendingCall);
+                const callInfo = currentPendingCall;
                 setPendingCall(null);
+                pendingCallRef.current = null;
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
+                return;
               } else if (checkRejection(msg.text)) {
-                console.log('❌ 전화 거절됨');
+                console.log('❌ 전화 거절됨 (음성)');
                 setPendingCall(null);
+                pendingCallRef.current = null;
                 addMessage('네, 전화를 취소했습니다.', false);
+                return;
               }
-              return;
             }
             
             const callInfo = checkCallCommand(msg.text);
             if (callInfo) {
               console.log('📞 전화 명령 감지:', callInfo);
               setPendingCall(callInfo);
+              pendingCallRef.current = callInfo;
               addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
             }
           }
@@ -342,6 +366,7 @@ function AgentPage() {
     setIsVoiceMode(false);
     setStatus('대기중');
     setPendingCall(null);
+    pendingCallRef.current = null;
   };
 
   const makeCall = async (name, phone, purpose = '상담 일정 예약') => {
@@ -349,10 +374,13 @@ function AgentPage() {
     
     stopVoiceMode();
     setStatus('전화 연결중...');
+    addMessage(`📞 ${name}님께 전화 연결중...`, false);
     
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
+      
+      console.log('📞 API 호출:', RENDER_SERVER + '/api/call-realtime', { to: fullPhone, customerName: name, purpose });
       
       const response = await fetch(`${RENDER_SERVER}/api/call-realtime`, {
         method: 'POST',
@@ -376,14 +404,14 @@ function AgentPage() {
           setCallDuration(prev => prev + 1);
         }, 1000);
         
-        addMessage(`📞 ${name}님께 ${purpose} 목적으로 전화 연결됨 (AI 대화)`, false);
+        addMessage(`📞 ${name}님께 전화 연결됨 (AI 대화)`, false);
       } else {
         addMessage(`❌ 연결 실패: ${data.error}`, false);
         setStatus('대기중');
       }
     } catch (error) {
       console.error('전화 에러:', error);
-      addMessage('⏳ 잠시 후 다시 시도해주세요.', false);
+      addMessage(`❌ 전화 연결 실패: ${error.message}`, false);
       setStatus('대기중');
     }
   };
@@ -421,35 +449,48 @@ function AgentPage() {
     return `${m}분 ${s}초`;
   };
 
+  // 🆕 텍스트 전송 로직 개선
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    const text = inputText;
+    const text = inputText.trim();
     setInputText('');
     
     addMessage(text, true);
     
+    console.log('📝 텍스트 입력:', text, '| pendingCall:', pendingCall);
+    
+    // 🆕 승인 대기 중인 전화가 있으면 최우선 처리
     if (pendingCall) {
       if (checkApproval(text)) {
         console.log('✅ 전화 승인됨 (텍스트):', pendingCall);
         const callInfo = pendingCall;
         setPendingCall(null);
+        pendingCallRef.current = null;
         await makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
-        return;
+        return; // 여기서 반드시 종료!
       } else if (checkRejection(text)) {
         console.log('❌ 전화 거절됨 (텍스트)');
         setPendingCall(null);
+        pendingCallRef.current = null;
         addMessage('네, 전화를 취소했습니다.', false);
-        return;
+        return; // 여기서 반드시 종료!
       }
+      // 승인도 거절도 아니면 pendingCall 유지하고 다시 질문
+      addMessage(`${pendingCall.name}님께 전화할까요? (네/아니오)`, false);
+      return;
     }
     
+    // 전화 명령 감지
     const callInfo = checkCallCommand(text);
     if (callInfo) {
+      console.log('📞 전화 명령 감지 (텍스트):', callInfo);
       setPendingCall(callInfo);
+      pendingCallRef.current = callInfo;
       addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
       return;
     }
     
+    // 일반 채팅
     setStatus('생각중...');
     
     try {
@@ -510,12 +551,16 @@ function AgentPage() {
           </div>
           <div className="pending-buttons">
             <button className="approve-btn" onClick={() => {
+              console.log('✅ 버튼 클릭 승인:', pendingCall);
               const callInfo = pendingCall;
               setPendingCall(null);
+              pendingCallRef.current = null;
               makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
             }}>네</button>
             <button className="reject-btn" onClick={() => {
+              console.log('❌ 버튼 클릭 거절');
               setPendingCall(null);
+              pendingCallRef.current = null;
               addMessage('네, 전화를 취소했습니다.', false);
             }}>아니오</button>
           </div>
