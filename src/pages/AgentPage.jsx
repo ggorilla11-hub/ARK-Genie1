@@ -14,6 +14,7 @@ function AgentPage() {
   const [pendingCall, setPendingCall] = useState(null);
   
   const chatAreaRef = useRef(null);
+  const messagesEndRef = useRef(null);
   const wsRef = useRef(null);
   const audioContextRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -23,10 +24,21 @@ function AgentPage() {
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
 
+  // 🆕 스크롤 함수 개선
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+      if (chatAreaRef.current) {
+        chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  // 🆕 메시지 변경 시 스크롤
   useEffect(() => {
-    if (chatAreaRef.current) {
-      chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
-    }
+    scrollToBottom();
   }, [messages]);
 
   useEffect(() => {
@@ -65,13 +77,19 @@ function AgentPage() {
     return () => clearInterval(intervalId);
   }, [currentCall, callDuration]);
 
+  // 🆕 메시지 추가 후 스크롤
   const addMessage = (text, isUser) => {
-    setMessages(prev => [...prev, {
-      id: Date.now() + Math.random(),
-      text,
-      isUser,
-      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-    }]);
+    setMessages(prev => {
+      const newMessages = [...prev, {
+        id: Date.now() + Math.random(),
+        text,
+        isUser,
+        time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      }];
+      return newMessages;
+    });
+    // 메시지 추가 직후 스크롤
+    setTimeout(scrollToBottom, 50);
   };
 
   const playAudio = async (base64Audio) => {
@@ -512,14 +530,17 @@ function AgentPage() {
             <p>🎙️ 버튼 누르고 자유롭게 말씀하세요.</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
-              <div className="message-content">
-                <p>{msg.text}</p>
-                <span className="message-time">{msg.time}</span>
+          <>
+            {messages.map((msg) => (
+              <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
+                <div className="message-content">
+                  <p>{msg.text}</p>
+                  <span className="message-time">{msg.time}</span>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
 
