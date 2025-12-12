@@ -12,6 +12,7 @@ function AgentPage() {
   const [currentCall, setCurrentCall] = useState(null);
   const [callDuration, setCallDuration] = useState(0);
   const [pendingCall, setPendingCall] = useState(null); // 승인 대기 중인 전화
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // 🆕 파일 분석 중 상태
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -24,6 +25,7 @@ function AgentPage() {
   const isConnectedRef = useRef(false);
   const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
   const muteServerAudioRef = useRef(false); // 🆕 서버 음성 차단 플래그
+  const fileInputRef = useRef(null); // 🆕 파일 입력 ref
 
   // 스크롤 자동 이동 (scrollIntoView 방식)
   const messagesEndRef = useRef(null);
@@ -86,13 +88,94 @@ function AgentPage() {
     return () => clearInterval(intervalId);
   }, [currentCall, callDuration]);
 
-  const addMessage = (text, isUser) => {
+  // 🆕 메시지 추가 (이미지 지원)
+  const addMessage = (text, isUser, imageData = null) => {
     setMessages(prev => [...prev, {
       id: Date.now() + Math.random(),
       text,
       isUser,
+      imageData, // 🆕 이미지 데이터 (base64)
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
     }]);
+  };
+
+  // 🆕 파일 선택 핸들러
+  const handleFileSelect = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // 이미지 파일 확인
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드 가능합니다.');
+      return;
+    }
+    
+    // 파일 크기 제한 (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('파일 크기는 10MB 이하여야 합니다.');
+      return;
+    }
+    
+    try {
+      // 이미지를 base64로 변환
+      const base64 = await fileToBase64(file);
+      
+      // 대화창에 이미지 표시
+      addMessage('📎 이미지를 업로드했습니다. 분석 중...', true, base64);
+      
+      // 분석 시작
+      setIsAnalyzing(true);
+      setStatus('분석중...');
+      
+      // GPT-4o Vision API로 분석 요청
+      const analysis = await analyzeImage(base64);
+      
+      // 분석 결과 표시
+      addMessage(analysis, false);
+      
+    } catch (error) {
+      console.error('파일 처리 에러:', error);
+      addMessage('❌ 파일 분석 중 오류가 발생했습니다.', false);
+    } finally {
+      setIsAnalyzing(false);
+      setStatus('대기중');
+      // 파일 입력 초기화 (같은 파일 다시 선택 가능하도록)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // 🆕 파일을 base64로 변환
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // 🆕 GPT-4o Vision API로 이미지 분석
+  const analyzeImage = async (base64Image) => {
+    try {
+      const response = await fetch(`${RENDER_SERVER}/api/analyze-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Image })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        return data.analysis;
+      } else {
+        return `❌ 분석 실패: ${data.error}`;
+      }
+    } catch (error) {
+      console.error('이미지 분석 API 에러:', error);
+      return '❌ 서버 연결 오류. 잠시 후 다시 시도해주세요.';
+    }
   };
 
   // 오디오 재생
@@ -604,16 +687,34 @@ function AgentPage() {
             <div className="welcome-icon">🧞</div>
             <h2>안녕하세요, 지니입니다!</h2>
             <p>🎙️ 버튼 누르고 자유롭게 말씀하세요.</p>
+            <p>📎 파일 버튼으로 보험증권을 분석해보세요.</p>
           </div>
         ) : (
           messages.map((msg) => (
             <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
               <div className="message-content">
+                {/* 🆕 이미지가 있으면 표시 */}
+                {msg.imageData && (
+                  <img 
+                    src={msg.imageData} 
+                    alt="업로드된 이미지" 
+                    className="message-image"
+                    onClick={() => window.open(msg.imageData, '_blank')}
+                  />
+                )}
                 <p>{msg.text}</p>
                 <span className="message-time">{msg.time}</span>
               </div>
             </div>
           ))
+        )}
+        {/* 분석 중 표시 */}
+        {isAnalyzing && (
+          <div className="message ai">
+            <div className="message-content">
+              <p>🔍 이미지를 분석하고 있습니다...</p>
+            </div>
+          </div>
         )}
         {/* 스크롤 타겟 */}
         <div ref={messagesEndRef} />
@@ -625,21 +726,35 @@ function AgentPage() {
       </div>
 
       <div className="input-area">
+        {/* 🆕 숨겨진 파일 입력 */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept="image/*"
+          capture="environment"
+          style={{ display: 'none' }}
+        />
+        
         {/* 🆕 상단 버튼 행: 파일, 보이스, 녹음 */}
         <div className="action-buttons">
-          <button className="action-btn" disabled={!!currentCall || isVoiceMode}>
+          <button 
+            className="action-btn" 
+            disabled={!!currentCall || isVoiceMode || isAnalyzing}
+            onClick={() => fileInputRef.current?.click()}
+          >
             <span className="action-icon">📎</span>
             <span className="action-label">파일</span>
           </button>
           <button 
             className={`action-btn voice ${isVoiceMode ? 'active' : ''}`}
             onClick={isVoiceMode ? stopVoiceMode : startVoiceMode}
-            disabled={!!currentCall}
+            disabled={!!currentCall || isAnalyzing}
           >
             <span className="action-icon">{isVoiceMode ? '🔴' : '🎤'}</span>
             <span className="action-label">보이스</span>
           </button>
-          <button className="action-btn" disabled={!!currentCall || isVoiceMode}>
+          <button className="action-btn" disabled={!!currentCall || isVoiceMode || isAnalyzing}>
             <span className="action-icon">🔴</span>
             <span className="action-label">녹음</span>
           </button>
@@ -653,9 +768,9 @@ function AgentPage() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            disabled={isVoiceMode}
+            disabled={isVoiceMode || isAnalyzing}
           />
-          <button className="send-btn" onClick={handleSend} disabled={isVoiceMode}>➤</button>
+          <button className="send-btn" onClick={handleSend} disabled={isVoiceMode || isAnalyzing}>➤</button>
         </div>
       </div>
     </div>
