@@ -253,38 +253,52 @@ function AgentPage() {
           
           // 사용자 메시지
           if (msg.type === 'transcript' && msg.role === 'user') {
+            console.log('🎤 [DEBUG] 사용자 음성 인식:', msg.text);
             addMessage(msg.text, true);
             
             // 승인 대기 중인 전화가 있으면 승인/거절 확인
+            console.log('🔍 [DEBUG] pendingCall 상태:', pendingCall);
             if (pendingCall) {
-              if (checkApproval(msg.text)) {
+              console.log('🔍 [DEBUG] checkApproval 검사:', msg.text);
+              const isApproved = checkApproval(msg.text);
+              console.log('🔍 [DEBUG] checkApproval 결과:', isApproved);
+              
+              if (isApproved) {
                 // 승인됨 - 전화 발신
-                console.log('✅ 전화 승인됨:', pendingCall);
+                console.log('✅ [DEBUG] 전화 승인됨! makeCall 호출 예정:', pendingCall);
                 const callInfo = pendingCall;
                 setPendingCall(null);
+                console.log('📞 [DEBUG] makeCall 호출 시작');
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
+                console.log('📞 [DEBUG] makeCall 호출 완료');
               } else if (checkRejection(msg.text)) {
                 // 거절됨
                 console.log('❌ 전화 거절됨');
                 setPendingCall(null);
                 addMessage('네, 전화를 취소했습니다.', false);
+              } else {
+                console.log('⚠️ [DEBUG] 승인도 거절도 아님:', msg.text);
               }
               return;
             }
             
             // 전화 명령 감지
             const callInfo = checkCallCommand(msg.text);
+            console.log('🔍 [DEBUG] checkCallCommand 결과:', callInfo);
             if (callInfo) {
-              console.log('📞 전화 명령 감지:', callInfo);
+              console.log('📞 [DEBUG] 전화 명령 감지! setPendingCall 호출:', callInfo);
               // 바로 전화하지 않고 승인 대기
               setPendingCall(callInfo);
+              console.log('📞 [DEBUG] setPendingCall 완료, 메시지 추가');
               // 지니가 복명복창 (3초 후 자동 전화 대신 승인 대기)
               addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
+              console.log('📞 [DEBUG] 복명복창 메시지 추가 완료');
             }
           }
           
           // 지니 메시지
           if (msg.type === 'transcript' && msg.role === 'assistant') {
+            console.log('🤖 [DEBUG] 지니 응답:', msg.text);
             addMessage(msg.text, false);
           }
           
