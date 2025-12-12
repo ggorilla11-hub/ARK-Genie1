@@ -385,6 +385,12 @@ function AgentPage() {
     }
     if (isConnectedRef.current) return;
     
+    // 🆕 v15.1: 음성모드 시작 시 이전 전화 정보 초기화 (버그 수정)
+    lastCallInfoRef.current = null;
+    setPendingCall(null);
+    muteServerAudioRef.current = false;
+    console.log('🔄 [v15.1] 음성모드 시작 - 이전 전화 정보 초기화');
+    
     try {
       setStatus('연결중...');
       setIsVoiceMode(true);
@@ -574,6 +580,10 @@ function AgentPage() {
     
     stopVoiceMode();
     setStatus('전화 연결중...');
+    
+    // 🆕 v15.1: 전화 발신 시 이전 전화 정보 완전 초기화
+    lastCallInfoRef.current = null;
+    setPendingCall(null);
     
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
