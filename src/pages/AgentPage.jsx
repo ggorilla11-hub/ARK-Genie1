@@ -14,6 +14,7 @@ function AgentPage() {
   const [pendingCall, setPendingCall] = useState(null); // 승인 대기 중인 전화
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🆕 파일 분석 중 상태
   const [showFileMenu, setShowFileMenu] = useState(false); // 🆕 파일 하위 메뉴 표시
+  const [analysisContext, setAnalysisContext] = useState(null); // 🆕 v11.4: 분석 결과 저장 (대화 AI에 전달용)
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -154,6 +155,28 @@ function AgentPage() {
       
       // 분석 결과 표시
       addMessage(analysis, false);
+      
+      // 🆕 v11.4: 분석 결과를 컨텍스트에 저장 (대화 AI에서 활용)
+      const contextData = {
+        fileName: fileName,
+        fileType: fileType,
+        analysis: analysis,
+        timestamp: new Date().toISOString()
+      };
+      setAnalysisContext(contextData);
+      console.log('📋 [v11.4] 분석 컨텍스트 저장:', contextData);
+      
+      // 🆕 v11.4: 음성 모드 중이면 WebSocket으로 컨텍스트 즉시 전달
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'update_context',
+          analysisContext: contextData
+        }));
+        console.log('📤 [v11.4] 분석 컨텍스트를 서버에 전달');
+      }
+      
+      // 추가 질문 안내 메시지
+      addMessage('💬 추가 분석이나 질문이 있으시면 음성 또는 텍스트로 말씀해주세요!', false);
       
     } catch (error) {
       console.error('파일 처리 에러:', error);
@@ -355,7 +378,13 @@ function AgentPage() {
       
       ws.onopen = () => {
         console.log('✅ WebSocket 연결됨');
-        ws.send(JSON.stringify({ type: 'start_app' }));
+        // 🆕 v11.4: 분석 컨텍스트가 있으면 함께 전달
+        const startMessage = { 
+          type: 'start_app',
+          analysisContext: analysisContext // 분석 결과 포함
+        };
+        ws.send(JSON.stringify(startMessage));
+        console.log('📤 [v11.4] start_app 전송, 컨텍스트:', analysisContext ? '있음' : '없음');
       };
       
       ws.onmessage = (event) => {
