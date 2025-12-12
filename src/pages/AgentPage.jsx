@@ -14,7 +14,7 @@ function AgentPage() {
   const [pendingCall, setPendingCall] = useState(null); // 승인 대기 중인 전화
   const [isAnalyzing, setIsAnalyzing] = useState(false); // 🆕 파일 분석 중 상태
   const [showFileMenu, setShowFileMenu] = useState(false); // 🆕 파일 하위 메뉴 표시
-  const [analysisContext, setAnalysisContext] = useState(null); // 🆕 v11.4: 분석 결과 저장 (대화 AI에 전달용)
+  const [analysisContextList, setAnalysisContextList] = useState([]); // 🆕 v15: 다중 파일 분석 결과 누적 저장
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -103,10 +103,17 @@ function AgentPage() {
     }]);
   };
 
-  // 🆕 파일 선택 핸들러 - 이미지, PDF, 문서 모두 지원
+  // 🆕 v15: 분석 컨텍스트 초기화 함수
+  const clearAnalysisContext = () => {
+    setAnalysisContextList([]);
+    addMessage('🗑️ 분석 기록이 초기화되었습니다. 새로운 파일을 업로드해주세요.', false);
+    console.log('🗑️ [v15] 분석 컨텍스트 초기화');
+  };
+
+  // 🆕 v15: 다중 파일 선택 핸들러 - 동시 업로드 + 누적 분석 지원
   const handleFileSelect = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files); // 다중 파일 지원
+    if (!files || files.length === 0) return;
     
     // 지원 파일 형식 확인
     const supportedTypes = [
@@ -118,77 +125,91 @@ function AgentPage() {
       'text/plain'
     ];
     
-    const isImage = file.type.startsWith('image/');
-    const isPDF = file.type === 'application/pdf';
-    const isSupported = supportedTypes.some(type => file.type.includes(type.split('/')[1])) || isImage || isPDF;
-    
-    if (!isSupported && !file.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|pdf|doc|docx|xls|xlsx|hwp|txt)$/i)) {
-      alert('지원하지 않는 파일 형식입니다.\n\n지원 형식: 이미지(JPG, PNG), PDF, Word, Excel, HWP, TXT');
-      return;
-    }
-    
-    // 파일 크기 제한 (20MB로 확대)
-    if (file.size > 20 * 1024 * 1024) {
-      alert('파일 크기는 20MB 이하여야 합니다.');
-      return;
-    }
-    
-    try {
-      // 파일을 base64로 변환
-      const base64 = await fileToBase64(file);
-      const fileName = file.name;
-      const fileType = isImage ? 'image' : (isPDF ? 'pdf' : 'document');
+    // 각 파일 처리
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      const isSupported = supportedTypes.some(type => file.type.includes(type.split('/')[1])) || isImage || isPDF;
       
-      // 대화창에 파일 정보 표시
-      if (isImage) {
-        addMessage(`📎 이미지를 업로드했습니다: ${fileName}\n분석 중...`, true, base64);
-      } else {
-        addMessage(`📎 파일을 업로드했습니다: ${fileName}\n분석 중...`, true, null);
+      if (!isSupported && !file.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|pdf|doc|docx|xls|xlsx|hwp|txt)$/i)) {
+        addMessage(`⚠️ 지원하지 않는 파일: ${file.name}`, false);
+        continue;
       }
       
-      // 분석 시작
-      setIsAnalyzing(true);
-      setStatus('분석중...');
-      
-      // API로 분석 요청 (파일 타입 정보 포함)
-      const analysis = await analyzeFile(base64, fileName, fileType);
-      
-      // 분석 결과 표시
-      addMessage(analysis, false);
-      
-      // 🆕 v11.4: 분석 결과를 컨텍스트에 저장 (대화 AI에서 활용)
-      const contextData = {
-        fileName: fileName,
-        fileType: fileType,
-        analysis: analysis,
-        timestamp: new Date().toISOString()
-      };
-      setAnalysisContext(contextData);
-      console.log('📋 [v11.4] 분석 컨텍스트 저장:', contextData);
-      
-      // 🆕 v11.4: 음성 모드 중이면 WebSocket으로 컨텍스트 즉시 전달
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({
-          type: 'update_context',
-          analysisContext: contextData
-        }));
-        console.log('📤 [v11.4] 분석 컨텍스트를 서버에 전달');
+      // 파일 크기 제한 (20MB)
+      if (file.size > 20 * 1024 * 1024) {
+        addMessage(`⚠️ 파일 크기 초과 (20MB 제한): ${file.name}`, false);
+        continue;
       }
       
-      // 추가 질문 안내 메시지
-      addMessage('💬 추가 분석이나 질문이 있으시면 음성 또는 텍스트로 말씀해주세요!', false);
-      
-    } catch (error) {
-      console.error('파일 처리 에러:', error);
-      addMessage('❌ 파일 분석 중 오류가 발생했습니다.', false);
-    } finally {
-      setIsAnalyzing(false);
-      setStatus('대기중');
-      // 파일 입력 초기화 (같은 파일 다시 선택 가능하도록)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      try {
+        // 파일을 base64로 변환
+        const base64 = await fileToBase64(file);
+        const fileName = file.name;
+        const fileType = isImage ? 'image' : (isPDF ? 'pdf' : 'document');
+        
+        // 대화창에 파일 정보 표시
+        const fileCount = analysisContextList.length + 1;
+        if (isImage) {
+          addMessage(`📎 [${fileCount}번째 파일] 이미지 업로드: ${fileName}\n분석 중...`, true, base64);
+        } else {
+          addMessage(`📎 [${fileCount}번째 파일] 파일 업로드: ${fileName}\n분석 중...`, true, null);
+        }
+        
+        // 분석 시작
+        setIsAnalyzing(true);
+        setStatus(`분석중... (${fileCount}번째)`);
+        
+        // API로 분석 요청
+        const analysis = await analyzeFile(base64, fileName, fileType);
+        
+        // 분석 결과 표시
+        addMessage(analysis, false);
+        
+        // 🆕 v15: 분석 결과를 배열에 누적 저장
+        const contextData = {
+          id: Date.now(),
+          fileName: fileName,
+          fileType: fileType,
+          analysis: analysis,
+          timestamp: new Date().toISOString()
+        };
+        
+        setAnalysisContextList(prev => {
+          const newList = [...prev, contextData];
+          console.log(`📋 [v15] 분석 컨텍스트 누적: ${newList.length}개 파일`);
+          
+          // 🆕 v15: 음성 모드 중이면 WebSocket으로 누적된 컨텍스트 전달
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+              type: 'update_context',
+              analysisContextList: newList
+            }));
+            console.log('📤 [v15] 누적 분석 컨텍스트를 서버에 전달');
+          }
+          
+          return newList;
+        });
+        
+      } catch (error) {
+        console.error('파일 처리 에러:', error);
+        addMessage(`❌ 파일 분석 실패: ${file.name}`, false);
       }
     }
+    
+    // 분석 완료 메시지
+    setIsAnalyzing(false);
+    setStatus('대기중');
+    
+    const totalFiles = analysisContextList.length + files.length;
+    if (totalFiles > 1) {
+      addMessage(`✅ 총 ${totalFiles}개 파일 분석 완료!\n💬 "비교해줘", "어떤 게 더 좋아?" 등 질문해보세요.`, false);
+    } else {
+      addMessage('💬 추가 파일을 업로드하거나 질문해주세요!', false);
+    }
+    
+    // 파일 입력 초기화
+    event.target.value = '';
   };
 
   // 🆕 파일을 base64로 변환
@@ -378,13 +399,13 @@ function AgentPage() {
       
       ws.onopen = () => {
         console.log('✅ WebSocket 연결됨');
-        // 🆕 v11.4: 분석 컨텍스트가 있으면 함께 전달
+        // 🆕 v15: 다중 분석 컨텍스트 전달
         const startMessage = { 
           type: 'start_app',
-          analysisContext: analysisContext // 분석 결과 포함
+          analysisContextList: analysisContextList // 누적된 분석 결과 전달
         };
         ws.send(JSON.stringify(startMessage));
-        console.log('📤 [v11.4] start_app 전송, 컨텍스트:', analysisContext ? '있음' : '없음');
+        console.log('📤 [v15] start_app 전송, 분석 파일 수:', analysisContextList.length);
       };
       
       ws.onmessage = (event) => {
@@ -795,6 +816,7 @@ function AgentPage() {
           ref={imageInputRef}
           onChange={handleFileSelect}
           accept="image/*"
+          multiple
           style={{ display: 'none' }}
         />
         <input
@@ -802,6 +824,7 @@ function AgentPage() {
           ref={fileInputRef}
           onChange={handleFileSelect}
           accept=".pdf,.doc,.docx,.xls,.xlsx,.hwp,.txt"
+          multiple
           style={{ display: 'none' }}
         />
         
@@ -838,6 +861,19 @@ function AgentPage() {
               <span>📁</span>
               <span>파일첨부</span>
             </button>
+            {/* 🆕 v15: 분석 초기화 버튼 */}
+            {analysisContextList.length > 0 && (
+              <button 
+                className="submenu-btn submenu-clear"
+                onClick={() => {
+                  clearAnalysisContext();
+                  setShowFileMenu(false);
+                }}
+              >
+                <span>🗑️</span>
+                <span>초기화 ({analysisContextList.length})</span>
+              </button>
+            )}
             <button 
               className="submenu-close"
               onClick={() => setShowFileMenu(false)}
