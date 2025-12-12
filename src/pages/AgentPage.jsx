@@ -24,15 +24,24 @@ function AgentPage() {
   const isConnectedRef = useRef(false);
   const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
 
-  // 스크롤 자동 이동 (개선됨)
+  // 스크롤 자동 이동 (강화됨)
   useEffect(() => {
-    // 약간의 지연 후 스크롤 (렌더링 완료 보장)
-    const timer = setTimeout(() => {
+    // 여러 번 시도하여 확실하게 스크롤
+    const scrollToBottom = () => {
       if (chatAreaRef.current) {
         chatAreaRef.current.scrollTop = chatAreaRef.current.scrollHeight;
       }
-    }, 100);
-    return () => clearTimeout(timer);
+    };
+    
+    // 즉시 + 100ms 후 + 300ms 후 스크롤
+    scrollToBottom();
+    const timer1 = setTimeout(scrollToBottom, 100);
+    const timer2 = setTimeout(scrollToBottom, 300);
+    
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
   }, [messages]);
 
   // 컴포넌트 언마운트 시 정리
@@ -257,30 +266,33 @@ function AgentPage() {
             console.log('🎤 [DEBUG] 사용자 음성 인식:', msg.text);
             addMessage(msg.text, true);
             
-            // 승인 대기 중인 전화가 있으면 승인/거절 확인
-            console.log('🔍 [DEBUG] pendingCall 상태:', pendingCall);
-            if (pendingCall) {
+            // 🆕 승인 대기 중인 전화가 있으면 승인/거절 확인 (lastCallInfoRef 사용)
+            console.log('🔍 [DEBUG] lastCallInfoRef 상태:', lastCallInfoRef.current);
+            if (lastCallInfoRef.current) {
               console.log('🔍 [DEBUG] checkApproval 검사:', msg.text);
               const isApproved = checkApproval(msg.text);
               console.log('🔍 [DEBUG] checkApproval 결과:', isApproved);
               
               if (isApproved) {
                 // 승인됨 - 전화 발신
-                console.log('✅ [DEBUG] 전화 승인됨! makeCall 호출 예정:', pendingCall);
-                const callInfo = pendingCall;
+                console.log('✅ [DEBUG] 전화 승인됨! makeCall 호출 예정:', lastCallInfoRef.current);
+                const callInfo = lastCallInfoRef.current;
+                lastCallInfoRef.current = null; // 사용 후 초기화
                 setPendingCall(null);
                 console.log('📞 [DEBUG] makeCall 호출 시작');
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
                 console.log('📞 [DEBUG] makeCall 호출 완료');
+                return;
               } else if (checkRejection(msg.text)) {
                 // 거절됨
                 console.log('❌ 전화 거절됨');
+                lastCallInfoRef.current = null;
                 setPendingCall(null);
                 addMessage('네, 전화를 취소했습니다.', false);
+                return;
               } else {
                 console.log('⚠️ [DEBUG] 승인도 거절도 아님:', msg.text);
               }
-              return;
             }
             
             // 전화 명령 감지
@@ -290,35 +302,26 @@ function AgentPage() {
               console.log('📞 [DEBUG] 전화 명령 감지! setPendingCall 호출:', callInfo);
               // 바로 전화하지 않고 승인 대기
               setPendingCall(callInfo);
-              lastCallInfoRef.current = callInfo; // 🆕 즉시 접근 가능하도록 ref에도 저장
+              lastCallInfoRef.current = callInfo; // 즉시 접근 가능하도록 ref에도 저장
               console.log('📞 [DEBUG] setPendingCall + lastCallInfoRef 완료');
-              // 지니가 복명복창 (3초 후 자동 전화 대신 승인 대기)
-              addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
+              // 🆕 프론트엔드에서 직접 복명복창 (서버 응답 무시)
+              addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요? (네/아니오)`, false);
               console.log('📞 [DEBUG] 복명복창 메시지 추가 완료');
+              return; // 🆕 서버 응답 처리 중단
             }
           }
           
           // 지니 메시지
           if (msg.type === 'transcript' && msg.role === 'assistant') {
             console.log('🤖 [DEBUG] 지니 응답:', msg.text);
-            addMessage(msg.text, false);
             
-            // 🆕 "전화합니다" 감지하면 전화 발신
-            if (msg.text.includes('전화합니다')) {
-              console.log('📞 [DEBUG] "전화합니다" 감지!');
-              console.log('📞 [DEBUG] lastCallInfoRef:', lastCallInfoRef.current);
-              
-              // lastCallInfoRef 사용 (즉시 접근 가능)
-              if (lastCallInfoRef.current) {
-                console.log('📞 [DEBUG] lastCallInfoRef로 전화 발신:', lastCallInfoRef.current);
-                const callInfo = lastCallInfoRef.current;
-                lastCallInfoRef.current = null; // 사용 후 초기화
-                setPendingCall(null);
-                makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
-              } else {
-                console.log('⚠️ [DEBUG] lastCallInfoRef가 없음!');
-              }
+            // 🆕 승인 대기 중이면 지니 응답 무시 (복명복창 우선)
+            if (lastCallInfoRef.current) {
+              console.log('⚠️ [DEBUG] 승인 대기 중 - 지니 응답 무시:', msg.text);
+              return;
             }
+            
+            addMessage(msg.text, false);
           }
           
           if (msg.type === 'interrupt') {
