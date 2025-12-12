@@ -23,6 +23,7 @@ function AgentPage() {
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
   const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
+  const muteServerAudioRef = useRef(false); // 🆕 서버 음성 차단 플래그
 
   // 스크롤 자동 이동 (scrollIntoView 방식)
   const messagesEndRef = useRef(null);
@@ -259,7 +260,12 @@ function AgentPage() {
             startAudioCapture(stream, ws);
           }
           
+          // 🆕 서버 음성 차단 중이면 오디오 무시
           if (msg.type === 'audio' && msg.data) {
+            if (muteServerAudioRef.current) {
+              console.log('🔇 [DEBUG] 서버 음성 차단 중 - 오디오 무시');
+              return;
+            }
             playAudio(msg.data);
           }
           
@@ -281,6 +287,7 @@ function AgentPage() {
                 const callInfo = lastCallInfoRef.current;
                 lastCallInfoRef.current = null; // 사용 후 초기화
                 setPendingCall(null);
+                muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
                 // 🆕 최종 복창 후 전화 발신
                 addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
                 console.log('📞 [DEBUG] makeCall 호출 시작');
@@ -292,6 +299,7 @@ function AgentPage() {
                 console.log('❌ 전화 거절됨');
                 lastCallInfoRef.current = null;
                 setPendingCall(null);
+                muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
                 addMessage('네, 전화를 취소했습니다.', false);
                 return;
               } else {
@@ -303,7 +311,10 @@ function AgentPage() {
             const callInfo = checkCallCommand(msg.text);
             console.log('🔍 [DEBUG] checkCallCommand 결과:', callInfo);
             if (callInfo) {
-              console.log('📞 [DEBUG] 전화 명령 감지! setPendingCall 호출:', callInfo);
+              console.log('📞 [DEBUG] 전화 명령 감지! 서버 음성 차단 시작');
+              // 🆕 서버 음성 차단 (서버가 "전화합니다" 말하는 것 방지)
+              muteServerAudioRef.current = true;
+              
               // 바로 전화하지 않고 승인 대기
               setPendingCall(callInfo);
               lastCallInfoRef.current = callInfo; // 즉시 접근 가능하도록 ref에도 저장
@@ -395,6 +406,7 @@ function AgentPage() {
     setIsVoiceMode(false);
     setStatus('대기중');
     setPendingCall(null); // 대기 중인 전화도 취소
+    muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
   };
 
   // 🆕 전화 걸기 (Realtime API 사용)
