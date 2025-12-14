@@ -157,7 +157,7 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app-container">
       <main className="main-content">
         {renderPage()}
       </main>
