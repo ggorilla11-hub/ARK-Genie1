@@ -4,7 +4,6 @@ function MyPage({ user, onLogout }) {
   const menuItems = [
     { icon: '👤', title: '내 정보', desc: '프로필 및 연락처 관리' },
     { icon: '💳', title: '구독 관리', desc: '결제 및 플랜 변경' },
-    { icon: '📊', title: '사용 통계', desc: '이번 달 사용량 확인' },
     { icon: '🔔', title: '알림 설정', desc: '푸시 알림 관리' },
     { icon: '❓', title: '도움말', desc: '자주 묻는 질문' },
     { icon: '📞', title: '고객센터', desc: '문의하기' },
@@ -30,19 +29,11 @@ function MyPage({ user, onLogout }) {
         </div>
       </div>
 
-      <div className="usage-summary">
-        <div className="usage-header">
-          <h3>이번 달 사용량</h3>
-          <span className="usage-date">2024.12</span>
-        </div>
-        <div className="usage-bar">
-          <div className="usage-fill" style={{ width: '45%' }}></div>
-        </div>
-        <div className="usage-stats">
-          <span>450 / 1,000 크레딧</span>
-          <span className="usage-percent">45%</span>
-        </div>
-      </div>
+      {/* 🆕 로그아웃 버튼을 여기로 이동 (사용량 자리) */}
+      <button className="logout-btn" onClick={onLogout}>
+        <span>🚪</span>
+        <span>로그아웃</span>
+      </button>
 
       <div className="quick-stats">
         <div className="stat-item">
@@ -73,11 +64,6 @@ function MyPage({ user, onLogout }) {
           </button>
         ))}
       </div>
-
-      <button className="logout-btn" onClick={onLogout}>
-        <span>🚪</span>
-        <span>로그아웃</span>
-      </button>
 
       <div className="app-version">
         <p>ARK 지니 v2.0.0</p>
