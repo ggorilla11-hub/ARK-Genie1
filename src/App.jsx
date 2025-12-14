@@ -5,6 +5,7 @@ import CustomerPage from './pages/CustomerPage';
 import MagicBoxPage from './pages/MagicBoxPage';
 import AgentPage from './pages/AgentPage';
 import MyPage from './pages/MyPage';
+import ProspectPage from './ProspectPage';
 import './App.css';
 
 function App() {
@@ -74,6 +75,8 @@ function App() {
         return <AgentPage user={user} />;
       case 'my':
         return <MyPage user={user} onLogout={handleLogout} />;
+      case 'prospect':
+        return <ProspectPage user={user} />;
       default:
         return <MagicBoxPage user={user} />;
     }
@@ -106,9 +109,9 @@ function App() {
           <span className="nav-icon-main">🧞</span>
           <span className="nav-label">매직박스</span>
         </button>
-        <button className={getNavClass('agent')} onClick={() => setCurrentPage('agent')}>
-          <span className="nav-icon">🤖</span>
-          <span className="nav-label">AI지니</span>
+        <button className={getNavClass('prospect')} onClick={() => setCurrentPage('prospect')}>
+          <span className="nav-icon">🎯</span>
+          <span className="nav-label">고객발굴</span>
         </button>
         <button className={getNavClass('my')} onClick={() => setCurrentPage('my')}>
           <span className="nav-icon">👤</span>
