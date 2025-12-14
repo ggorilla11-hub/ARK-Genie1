@@ -1,6 +1,6 @@
 // ============================================
-// ProspectPage.jsx v18.1 - 고객발굴 페이지 컴포넌트
-// ARK-Genie v18.1 - 파일선택 개선 + 공공데이터 출처
+// ProspectPage.jsx v18.3 - 고객발굴 페이지 컴포넌트
+// ARK-Genie v18.3 - 촬영/갤러리 버튼 분리
 // ============================================
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -9,7 +9,6 @@ import './ProspectPage.css';
 const API_SERVER = 'https://ark-genie-server.onrender.com';
 
 const ProspectPage = () => {
-  // 상태 관리
   const [step, setStep] = useState('legal');
   const [legalAgreed, setLegalAgreed] = useState(false);
   const [receiptImage, setReceiptImage] = useState(null);
@@ -33,8 +32,11 @@ const ProspectPage = () => {
     company: '보험사'
   });
   
-  const receiptInputRef = useRef(null);
-  const namecardInputRef = useRef(null);
+  // 🆕 v18.3: 촬영용 / 갤러리용 분리
+  const receiptCameraRef = useRef(null);
+  const receiptGalleryRef = useRef(null);
+  const namecardCameraRef = useRef(null);
+  const namecardGalleryRef = useRef(null);
   
   useEffect(() => {
     getGPS();
@@ -68,7 +70,6 @@ const ProspectPage = () => {
     setStep('input');
   };
   
-  // 🆕 v18.1: 파일 선택 (촬영 + 갤러리 통합)
   const handleImageSelect = (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -206,16 +207,11 @@ const ProspectPage = () => {
     setCopySuccess(false);
     
     try {
-      setLoadingMessage('📝 메시지 생성 중...');
-      
       const response = await fetch(`${API_SERVER}/api/generate-prospect-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prospectData: {
-            ...result,
-            selectedInsurance
-          },
+          prospectData: { ...result, selectedInsurance },
           messageType: channel,
           agentInfo
         })
@@ -245,7 +241,7 @@ const ProspectPage = () => {
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 3000);
     } catch (error) {
-      alert('복사에 실패했습니다. 수동으로 복사해주세요.');
+      alert('복사에 실패했습니다.');
     }
   };
   
@@ -264,32 +260,25 @@ const ProspectPage = () => {
   };
   
   const goBack = () => {
-    if (step === 'message') {
-      setStep('result');
-    } else if (step === 'result') {
-      setStep('input');
-    } else if (step === 'input') {
-      setStep('legal');
-    }
+    if (step === 'message') setStep('result');
+    else if (step === 'result') setStep('input');
+    else if (step === 'input') setStep('legal');
   };
   
   return (
     <div className="prospect-page">
-      {/* 헤더 */}
       <header className="prospect-header">
         <button className="back-btn" onClick={goBack}>←</button>
         <h1>🎯 고객발굴</h1>
         <button className="reset-btn" onClick={resetAll}>초기화</button>
       </header>
       
-      {/* ========== 법적 동의 단계 ========== */}
+      {/* ========== 법적 동의 ========== */}
       {step === 'legal' && (
         <div className="legal-section">
           <div className="legal-card">
             <h2>⚖️ 법적 사항 안내</h2>
-            <p className="legal-intro">
-              고객발굴 기능 사용 전 반드시 숙지해주세요.
-            </p>
+            <p className="legal-intro">고객발굴 기능 사용 전 반드시 숙지해주세요.</p>
             
             <div className="legal-rules">
               <div className="legal-rule">
@@ -299,7 +288,6 @@ const ProspectPage = () => {
                   <p>"무료 분석표 보내드려도 될까요?" 동의를 먼저 받으세요.</p>
                 </div>
               </div>
-              
               <div className="legal-rule">
                 <div className="rule-icon">2️⃣</div>
                 <div className="rule-content">
@@ -307,7 +295,6 @@ const ProspectPage = () => {
                   <p>특정 보험사/상품명을 언급하지 마세요.</p>
                 </div>
               </div>
-              
               <div className="legal-rule">
                 <div className="rule-icon">3️⃣</div>
                 <div className="rule-content">
@@ -320,8 +307,8 @@ const ProspectPage = () => {
             <div className="penalty-box">
               <h3>⚠️ 위반 시 제재</h3>
               <ul>
-                <li><strong>정보통신망법 제50조:</strong> 3천만원 과태료</li>
-                <li><strong>개인정보보호법 제71조:</strong> 5년 징역/5천만원</li>
+                <li><strong>정보통신망법:</strong> 3천만원 과태료</li>
+                <li><strong>개인정보보호법:</strong> 5년 징역/5천만원</li>
                 <li><strong>금융소비자보호법:</strong> 수입 50% 과징금</li>
               </ul>
             </div>
@@ -332,9 +319,7 @@ const ProspectPage = () => {
                 checked={legalAgreed}
                 onChange={(e) => setLegalAgreed(e.target.checked)}
               />
-              <span>
-                위 내용을 숙지했으며, 모든 법적 책임은 본인에게 있음을 이해합니다.
-              </span>
+              <span>위 내용을 숙지했으며, 모든 법적 책임은 본인에게 있음을 이해합니다.</span>
             </label>
             
             <button 
@@ -348,71 +333,121 @@ const ProspectPage = () => {
         </div>
       )}
       
-      {/* ========== 입력 단계 ========== */}
+      {/* ========== 입력 ========== */}
       {step === 'input' && (
         <div className="input-section">
           <div className="intro-banner">
             <div className="tip-badge">💡 TIP</div>
-            <p>"사장님, 무료 분석표 카톡으로 보내드려도 될까요?"</p>
-            <p className="tip-sub">이 한마디가 법적 보호막이 됩니다!</p>
+            <p>"사장님, 무료 분석표 보내드려도 될까요?"</p>
+            <p className="tip-sub">이 한마디가 법적 보호막입니다!</p>
           </div>
           
-          {/* 🆕 v18.1: 파일 선택 영역 (촬영 + 갤러리 통합) */}
+          {/* 🆕 v18.3: 촬영/갤러리 분리 UI */}
           <div className="capture-area">
-            <div 
-              className={`capture-box ${receiptImage ? 'has-image' : ''}`}
-              onClick={() => receiptInputRef.current.click()}
-            >
-              {receiptPreview ? (
-                <img src={receiptPreview} alt="영수증" className="preview-image" />
-              ) : (
-                <>
-                  <div className="capture-icon">🧾</div>
-                  <div className="capture-label">영수증 파일</div>
-                  <div className="capture-hint">촬영 또는 갤러리</div>
-                </>
-              )}
-              {receiptImage && <div className="capture-status">✓ 선택완료</div>}
+            {/* 영수증 */}
+            <div className="capture-row">
+              <div className="capture-label-box">
+                <span className="capture-label-icon">🧾</span>
+                <span className="capture-label-text">영수증</span>
+              </div>
+              <div className="capture-buttons">
+                <button 
+                  className={`capture-btn ${receiptImage ? 'done' : ''}`}
+                  onClick={() => receiptCameraRef.current.click()}
+                >
+                  <span className="capture-btn-icon">📷</span>
+                  <span className="capture-btn-text">{receiptImage ? '✓ 완료' : '촬영'}</span>
+                </button>
+                <button 
+                  className={`capture-btn ${receiptImage ? 'done' : ''}`}
+                  onClick={() => receiptGalleryRef.current.click()}
+                >
+                  <span className="capture-btn-icon">🖼️</span>
+                  <span className="capture-btn-text">{receiptImage ? '✓ 완료' : '갤러리'}</span>
+                </button>
+              </div>
+              {/* 촬영용 input */}
               <input
                 type="file"
                 accept="image/*"
-                ref={receiptInputRef}
+                capture="environment"
+                ref={receiptCameraRef}
+                onChange={(e) => handleImageSelect(e, 'receipt')}
+                style={{ display: 'none' }}
+              />
+              {/* 갤러리용 input */}
+              <input
+                type="file"
+                accept="image/*"
+                ref={receiptGalleryRef}
                 onChange={(e) => handleImageSelect(e, 'receipt')}
                 style={{ display: 'none' }}
               />
             </div>
             
-            <div 
-              className={`capture-box ${namecardImage ? 'has-image' : ''}`}
-              onClick={() => namecardInputRef.current.click()}
-            >
-              {namecardPreview ? (
-                <img src={namecardPreview} alt="명함" className="preview-image" />
-              ) : (
-                <>
-                  <div className="capture-icon">📇</div>
-                  <div className="capture-label">명함 파일</div>
-                  <div className="capture-hint">촬영 또는 갤러리</div>
-                </>
-              )}
-              {namecardImage && <div className="capture-status">✓ 선택완료</div>}
+            {/* 명함 */}
+            <div className="capture-row">
+              <div className="capture-label-box">
+                <span className="capture-label-icon">📇</span>
+                <span className="capture-label-text">명함</span>
+              </div>
+              <div className="capture-buttons">
+                <button 
+                  className={`capture-btn ${namecardImage ? 'done' : ''}`}
+                  onClick={() => namecardCameraRef.current.click()}
+                >
+                  <span className="capture-btn-icon">📷</span>
+                  <span className="capture-btn-text">{namecardImage ? '✓ 완료' : '촬영'}</span>
+                </button>
+                <button 
+                  className={`capture-btn ${namecardImage ? 'done' : ''}`}
+                  onClick={() => namecardGalleryRef.current.click()}
+                >
+                  <span className="capture-btn-icon">🖼️</span>
+                  <span className="capture-btn-text">{namecardImage ? '✓ 완료' : '갤러리'}</span>
+                </button>
+              </div>
               <input
                 type="file"
                 accept="image/*"
-                ref={namecardInputRef}
+                capture="environment"
+                ref={namecardCameraRef}
+                onChange={(e) => handleImageSelect(e, 'namecard')}
+                style={{ display: 'none' }}
+              />
+              <input
+                type="file"
+                accept="image/*"
+                ref={namecardGalleryRef}
                 onChange={(e) => handleImageSelect(e, 'namecard')}
                 style={{ display: 'none' }}
               />
             </div>
           </div>
           
+          {/* 미리보기 */}
+          {(receiptPreview || namecardPreview) && (
+            <div className="preview-area">
+              {receiptPreview && (
+                <div className="preview-box">
+                  <img src={receiptPreview} alt="영수증" />
+                  <p>🧾 영수증 ✓</p>
+                </div>
+              )}
+              {namecardPreview && (
+                <div className="preview-box">
+                  <img src={namecardPreview} alt="명함" />
+                  <p>📇 명함 ✓</p>
+                </div>
+              )}
+            </div>
+          )}
+          
           <div className="gps-area">
             <div className="gps-icon">📍</div>
             <div className="gps-info">
               <div className="gps-label">현재 위치</div>
-              <div className="gps-address">
-                {gpsAddress || '위치 확인 중...'}
-              </div>
+              <div className="gps-address">{gpsAddress || '위치 확인 중...'}</div>
             </div>
             <button className="gps-refresh" onClick={getGPS}>🔄</button>
           </div>
@@ -428,7 +463,7 @@ const ProspectPage = () => {
         </div>
       )}
       
-      {/* ========== 로딩 단계 ========== */}
+      {/* ========== 로딩 ========== */}
       {step === 'loading' && (
         <div className="loading-section">
           <div className="spinner"></div>
@@ -447,10 +482,9 @@ const ProspectPage = () => {
         </div>
       )}
       
-      {/* ========== 결과 단계 ========== */}
+      {/* ========== 결과 ========== */}
       {step === 'result' && result && (
         <div className="result-section">
-          {/* 🆕 v18.1: 공공데이터 출처 표시 */}
           <div className="data-source">
             <div className="data-source-icon">📊</div>
             <div className="data-source-text">
@@ -459,7 +493,6 @@ const ProspectPage = () => {
             </div>
           </div>
           
-          {/* 사업장 정보 */}
           <div className="result-card">
             <h3>🏢 사업장 정보</h3>
             <div className="info-grid">
@@ -493,16 +526,9 @@ const ProspectPage = () => {
                     : result.extracted?.phone || '-'}
                 </span>
               </div>
-              {result.extracted?.email && result.extracted.email !== '미확인' && (
-                <div className="info-row">
-                  <span className="info-label">이메일</span>
-                  <span className="info-value">{result.extracted.email}</span>
-                </div>
-              )}
             </div>
           </div>
           
-          {/* 보험 분석 */}
           <div className="result-card">
             <h3>🎯 보험 분석 결과</h3>
             
@@ -552,51 +578,34 @@ const ProspectPage = () => {
             )}
           </div>
           
-          {/* 연락 방법 선택 */}
           <div className="result-card">
             <h3>📨 연락하기</h3>
             <div className="contact-buttons">
-              <button 
-                className="contact-btn"
-                onClick={() => generateMessage('kakao')}
-              >
+              <button className="contact-btn" onClick={() => generateMessage('kakao')}>
                 <span className="contact-icon">💬</span>
                 <span className="contact-label">카카오톡</span>
               </button>
-              <button 
-                className="contact-btn"
-                onClick={() => generateMessage('sms')}
-              >
+              <button className="contact-btn" onClick={() => generateMessage('sms')}>
                 <span className="contact-icon">📱</span>
                 <span className="contact-label">문자</span>
               </button>
-              <button 
-                className="contact-btn"
-                onClick={() => generateMessage('email')}
-              >
+              <button className="contact-btn" onClick={() => generateMessage('email')}>
                 <span className="contact-icon">📧</span>
                 <span className="contact-label">이메일</span>
               </button>
-              <button 
-                className="contact-btn"
-                onClick={() => generateMessage('letter')}
-              >
+              <button className="contact-btn" onClick={() => generateMessage('letter')}>
                 <span className="contact-icon">📮</span>
                 <span className="contact-label">편지</span>
               </button>
             </div>
-            <p className="contact-hint">
-              ※ 메시지 생성 후 직접 발송하세요
-            </p>
+            <p className="contact-hint">※ 메시지 생성 후 직접 발송하세요</p>
           </div>
           
-          <div className="disclaimer">
-            ※ 본 분석은 공공데이터 기준 참고용이며, 실제와 다를 수 있습니다.
-          </div>
+          <div className="disclaimer">※ 본 분석은 공공데이터 기준 참고용이며, 실제와 다를 수 있습니다.</div>
         </div>
       )}
       
-      {/* ========== 메시지 단계 ========== */}
+      {/* ========== 메시지 ========== */}
       {step === 'message' && (
         <div className="message-section">
           <div className="result-card message-card">
@@ -606,9 +615,7 @@ const ProspectPage = () => {
                   messageChannel === 'email' ? '이메일' : '편지'} 메시지
             </h3>
             
-            <div className="generated-message">
-              {generatedMessage}
-            </div>
+            <div className="generated-message">{generatedMessage}</div>
             
             <div className="send-warning">
               <p>⚠️ 동의 없이 발송 시 <strong>정보통신망법 위반</strong></p>
@@ -651,9 +658,7 @@ const ProspectPage = () => {
             </div>
             
             <p className="action-hint">
-              {messageChannel === 'letter' 
-                ? '다운로드 후 출력하여 발송하세요.'
-                : '복사 후 앱에서 직접 발송하세요.'}
+              {messageChannel === 'letter' ? '다운로드 후 출력하여 발송하세요.' : '복사 후 앱에서 직접 발송하세요.'}
             </p>
             
             <button className="back-to-result" onClick={() => setStep('result')}>
