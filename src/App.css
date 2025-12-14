@@ -23,7 +23,6 @@
 html, body, #root {
   height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -39,12 +38,11 @@ body {
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
   max-width: 480px;
   margin: 0 auto;
   background: var(--bg-white);
   position: relative;
-  overflow: hidden;
 }
 
 /* ========== Main Content ========== */
