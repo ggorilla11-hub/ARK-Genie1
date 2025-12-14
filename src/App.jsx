@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
 import HomePage from './pages/HomePage';
 import CustomerPage from './pages/CustomerPage';
-import MagicBoxPage from './pages/MagicBoxPage';
 import AgentPage from './pages/AgentPage';
 import MyPage from './pages/MyPage';
 import ProspectPage from './ProspectPage';
@@ -11,7 +10,7 @@ import './App.css';
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState('magic');
+  const [currentPage, setCurrentPage] = useState('agent');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -32,7 +31,7 @@ function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setCurrentPage('magic');
+      setCurrentPage('agent');
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -69,16 +68,14 @@ function App() {
         return <HomePage user={user} />;
       case 'customers':
         return <CustomerPage user={user} />;
-      case 'magic':
-        return <MagicBoxPage user={user} />;
       case 'agent':
         return <AgentPage user={user} />;
-      case 'my':
-        return <MyPage user={user} onLogout={handleLogout} />;
       case 'prospect':
         return <ProspectPage user={user} />;
+      case 'my':
+        return <MyPage user={user} onLogout={handleLogout} />;
       default:
-        return <MagicBoxPage user={user} />;
+        return <AgentPage user={user} />;
     }
   };
 
@@ -86,8 +83,8 @@ function App() {
     return currentPage === page ? 'nav-item active' : 'nav-item';
   };
 
-  const getMagicNavClass = () => {
-    return currentPage === 'magic' ? 'nav-item main-nav active' : 'nav-item main-nav';
+  const getAgentNavClass = () => {
+    return currentPage === 'agent' ? 'nav-item main-nav active' : 'nav-item main-nav';
   };
 
   return (
@@ -105,9 +102,9 @@ function App() {
           <span className="nav-icon">👥</span>
           <span className="nav-label">고객</span>
         </button>
-        <button className={getMagicNavClass()} onClick={() => setCurrentPage('magic')}>
+        <button className={getAgentNavClass()} onClick={() => setCurrentPage('agent')}>
           <span className="nav-icon-main">🧞</span>
-          <span className="nav-label">매직박스</span>
+          <span className="nav-label">AI지니</span>
         </button>
         <button className={getNavClass('prospect')} onClick={() => setCurrentPage('prospect')}>
           <span className="nav-icon">🎯</span>
