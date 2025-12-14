@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { auth, provider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
-import { supabase, signInWithKakao } from './supabase';
 import HomePage from './pages/HomePage';
 import CustomerPage from './pages/CustomerPage';
 import AgentPage from './pages/AgentPage';
@@ -16,51 +15,11 @@ function App() {
   useEffect(() => {
     // Firebase 인증 상태 확인
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        setLoading(false);
-      }
-    });
-
-    // Supabase 카카오 인증 상태 확인
-    const checkSupabaseSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser({
-          uid: session.user.id,
-          email: session.user.email,
-          displayName: session.user.user_metadata?.name || session.user.email,
-          photoURL: session.user.user_metadata?.avatar_url || null,
-          provider: 'kakao'
-        });
-      }
+      setUser(currentUser);
       setLoading(false);
-    };
-
-    checkSupabaseSession();
-
-    // Supabase 인증 상태 변화 감지
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser({
-          uid: session.user.id,
-          email: session.user.email,
-          displayName: session.user.user_metadata?.name || session.user.email,
-          photoURL: session.user.user_metadata?.avatar_url || null,
-          provider: 'kakao'
-        });
-      } else if (event === 'SIGNED_OUT') {
-        // Firebase 사용자도 없으면 로그아웃 상태
-        if (!auth.currentUser) {
-          setUser(null);
-        }
-      }
     });
 
-    return () => {
-      unsubscribe();
-      subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   // Google 로그인
@@ -72,25 +31,10 @@ function App() {
     }
   };
 
-  // 카카오 로그인
-  const handleKakaoLogin = async () => {
-    try {
-      await signInWithKakao();
-    } catch (error) {
-      console.error('Kakao login error:', error);
-      alert('카카오 로그인에 실패했습니다. 다시 시도해주세요.');
-    }
-  };
-
   // 로그아웃
   const handleLogout = async () => {
     try {
-      // Firebase 로그아웃
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
-      // Supabase 로그아웃
-      await supabase.auth.signOut();
+      await signOut(auth);
       setUser(null);
       setCurrentPage('agent');
     } catch (error) {
@@ -114,12 +58,6 @@ function App() {
           <div className="login-logo">🧞</div>
           <h1>ARK 지니</h1>
           <p>보험설계사를 위한 AI 어시스턴트</p>
-          
-          {/* 카카오 로그인 버튼 */}
-          <button className="login-btn kakao-btn" onClick={handleKakaoLogin}>
-            <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_small.png" alt="Kakao" />
-            카카오로 로그인
-          </button>
           
           {/* Google 로그인 버튼 */}
           <button className="login-btn google-btn" onClick={handleLogin}>
@@ -157,7 +95,7 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className="app">
       <main className="main-content">
         {renderPage()}
       </main>
