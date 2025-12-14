@@ -1,823 +1,694 @@
-/* ============================================
-   ProspectPage.css v20 - 고객발굴 페이지 스타일
-   ARK-Genie v20 - 전체 너비 통일 + 헤더 일반 흐름
-   ============================================ */
-
-.prospect-page {
-  width: 100%;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  padding-bottom: 80px; /* 하단 네비게이션 공간 */
-  box-sizing: border-box;
-}
-
-/* ========== 헤더 (일반 흐름) ========== */
-.prospect-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: rgba(255,255,255,0.15);
-  backdrop-filter: blur(10px);
-}
-
-.prospect-header h1 {
-  color: white;
-  font-size: 18px;
-  margin: 0;
-}
-
-.back-btn, .reset-btn {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.back-btn:hover, .reset-btn:hover {
-  background: rgba(255,255,255,0.3);
-}
-
-/* ========== 공통 섹션 스타일 ========== */
-.legal-section,
-.input-section,
-.loading-section,
-.result-section,
-.message-section {
-  padding: 20px;
-  padding-bottom: 40px;
-}
-
-/* ========== 법적 동의 섹션 ========== */
-.legal-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-
-.legal-card h2 {
-  text-align: center;
-  margin: 0 0 12px 0;
-  font-size: 20px;
-}
-
-.legal-intro {
-  text-align: center;
-  color: #666;
-  margin-bottom: 20px;
-  font-size: 14px;
-}
-
-.legal-rules {
-  margin-bottom: 20px;
-}
-
-.legal-rule {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  margin-bottom: 10px;
-}
-
-.rule-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.rule-content strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #333;
-  font-size: 14px;
-}
-
-.rule-content p {
-  margin: 0;
-  font-size: 12px;
-  color: #666;
-}
-
-.penalty-box {
-  background: #fff3f3;
-  border: 1px solid #ffcdd2;
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 20px;
-}
-
-.penalty-box h3 {
-  margin: 0 0 10px 0;
-  color: #c62828;
-  font-size: 14px;
-}
-
-.penalty-box ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.penalty-box li {
-  font-size: 12px;
-  color: #c62828;
-  margin-bottom: 4px;
-}
-
-.legal-checkbox {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px;
-  background: #e3f2fd;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  cursor: pointer;
-}
-
-.legal-checkbox input {
-  width: 20px;
-  height: 20px;
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.legal-checkbox span {
-  font-size: 13px;
-  color: #1565c0;
-  line-height: 1.5;
-}
-
-.legal-btn {
-  width: 100%;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  background: #ccc;
-  color: white;
-  transition: all 0.3s;
-}
-
-.legal-btn.active {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-}
-
-.legal-btn:disabled {
-  cursor: not-allowed;
-}
-
-/* ========== 입력 섹션 ========== */
-.intro-banner {
-  background: rgba(255,255,255,0.95);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.tip-badge {
-  display: inline-block;
-  background: #ffc107;
-  color: #333;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.intro-banner p {
-  margin: 0;
-  font-size: 14px;
-  color: #333;
-  font-weight: 500;
-}
-
-.tip-sub {
-  font-size: 12px !important;
-  color: #666 !important;
-  margin-top: 4px !important;
-}
-
-/* 🆕 v20: 촬영/갤러리 클릭 시 선택 UI */
-.capture-area {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.capture-box {
-  flex: 1;
-  background: rgba(255,255,255,0.95);
-  border-radius: 16px;
-  padding: 24px 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.3s;
-  position: relative;
-  min-height: 120px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.capture-box:hover {
-  transform: scale(1.02);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-}
-
-.capture-box.has-image {
-  background: #e8f5e9;
-  border: 2px solid #4caf50;
-}
-
-.capture-icon {
-  font-size: 36px;
-  margin-bottom: 8px;
-}
-
-.capture-label {
-  font-size: 14px;
-  color: #333;
-  font-weight: 600;
-}
-
-.capture-hint {
-  font-size: 11px;
-  color: #888;
-  margin-top: 4px;
-}
-
-.capture-status {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: #4caf50;
-  color: white;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-/* 🆕 v20: 선택 팝업 오버레이 */
-.capture-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.capture-modal {
-  background: white;
-  border-radius: 20px;
-  padding: 24px;
-  width: 90%;
-  max-width: 320px;
-  text-align: center;
-}
-
-.capture-modal h3 {
-  margin: 0 0 20px 0;
-  font-size: 18px;
-  color: #333;
-}
-
-.capture-modal-btn {
-  width: 100%;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition: all 0.3s;
-}
-
-.capture-modal-btn.camera {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
-}
-
-.capture-modal-btn.gallery {
-  background: #f5f5f5;
-  color: #333;
-}
-
-.capture-modal-btn:hover {
-  transform: scale(1.02);
-}
-
-.capture-modal-cancel {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  background: white;
-  color: #666;
-  font-size: 14px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-
-/* 미리보기 영역 */
-.preview-area {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.preview-box {
-  flex: 1;
-  background: rgba(255,255,255,0.95);
-  border-radius: 12px;
-  padding: 12px;
-  text-align: center;
-}
-
-.preview-box img {
-  width: 100%;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
-.preview-box p {
-  margin: 8px 0 0 0;
-  font-size: 12px;
-  color: #4caf50;
-  font-weight: 600;
-}
-
-/* GPS 영역 */
-.gps-area {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255,255,255,0.95);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 20px;
-}
-
-.gps-icon {
-  font-size: 24px;
-}
-
-.gps-info {
-  flex: 1;
-}
-
-.gps-label {
-  font-size: 12px;
-  color: #666;
-}
-
-.gps-address {
-  font-size: 13px;
-  color: #333;
-  font-weight: 500;
-}
-
-.gps-refresh {
-  background: #e3f2fd;
-  border: none;
-  padding: 8px;
-  border-radius: 8px;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-/* 분석 버튼 */
-.analyze-btn {
-  width: 100%;
-  padding: 16px;
-  border: none;
-  border-radius: 12px;
-  background: white;
-  color: #667eea;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.3s;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-}
-
-.analyze-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-}
-
-.analyze-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ========== 로딩 섹션 ========== */
-.loading-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 50vh;
-}
-
-.spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid rgba(255,255,255,0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  color: white;
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 20px;
-}
-
-.loading-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.loading-step {
-  color: rgba(255,255,255,0.6);
-  font-size: 13px;
-  padding: 8px 16px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 8px;
-}
-
-.loading-step.active {
-  color: white;
-  background: rgba(255,255,255,0.25);
-  font-weight: 600;
-}
-
-/* ========== 결과 섹션 ========== */
-.result-card {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-}
-
-.result-card h3 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  color: #333;
-}
-
-.data-source {
-  background: #e8f5e9;
-  border: 1px solid #c8e6c9;
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.data-source-icon {
-  font-size: 20px;
-}
-
-.data-source-text {
-  font-size: 12px;
-  color: #2e7d32;
-}
-
-.data-source-text strong {
-  display: block;
-  font-size: 13px;
-}
-
-.info-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.info-row:last-child {
-  border-bottom: none;
-}
-
-.info-label {
-  font-size: 13px;
-  color: #888;
-}
-
-.info-value {
-  font-size: 14px;
-  color: #333;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.estimate-badge {
-  background: #fff3e0;
-  color: #e65100;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.insurance-section {
-  margin-bottom: 16px;
-}
-
-.insurance-category {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-
-.insurance-category.required {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.insurance-category.recommended {
-  background: #fff8e1;
-  color: #f57f17;
-}
-
-.insurance-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  margin-bottom: 8px;
-}
-
-.insurance-item input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-}
-
-.insurance-name {
-  flex: 1;
-  font-size: 14px;
-  color: #333;
-}
-
-.insurance-badge {
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.insurance-badge.required {
-  background: #ffcdd2;
-  color: #c62828;
-}
-
-.insurance-badge.recommended {
-  background: #ffe082;
-  color: #f57f17;
-}
-
-.sales-points {
-  background: #e8f5e9;
-  border-radius: 12px;
-  padding: 16px;
-  margin-top: 16px;
-}
-
-.sales-points h4 {
-  margin: 0 0 10px 0;
-  font-size: 14px;
-  color: #2e7d32;
-}
-
-.sales-points ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.sales-points li {
-  font-size: 13px;
-  color: #333;
-  margin-bottom: 6px;
-}
-
-.contact-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.contact-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 14px 8px;
-  background: #f5f5f5;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.contact-btn:hover {
-  background: #e3f2fd;
-  transform: translateY(-2px);
-}
-
-.contact-icon {
-  font-size: 24px;
-}
-
-.contact-label {
-  font-size: 11px;
-  color: #666;
-  font-weight: 500;
-}
-
-.contact-hint {
-  text-align: center;
-  font-size: 12px;
-  color: #888;
-  margin-top: 12px;
-}
-
-.disclaimer {
-  text-align: center;
-  font-size: 12px;
-  color: rgba(255,255,255,0.8);
-  padding: 16px;
-}
-
-/* ========== 메시지 섹션 ========== */
-.message-card {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-}
-
-.generated-message {
-  background: #f8f9fa;
-  border-radius: 12px;
-  padding: 16px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #333;
-  white-space: pre-wrap;
-  max-height: 200px;
-  overflow-y: auto;
-  margin-bottom: 16px;
-}
-
-.send-warning {
-  background: #fff3f3;
-  border: 1px solid #ffcdd2;
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.send-warning p {
-  margin: 0;
-  font-size: 12px;
-  color: #c62828;
-}
-
-.consent-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  background: #e3f2fd;
-  border-radius: 10px;
-  margin-bottom: 16px;
-  cursor: pointer;
-}
-
-.consent-checkbox input {
-  width: 18px;
-  height: 18px;
-}
-
-.consent-checkbox span {
-  font-size: 14px;
-  color: #1565c0;
-}
-
-.message-actions {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.copy-btn, .download-btn {
-  flex: 1;
-  padding: 14px;
-  border: none;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.copy-btn {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
-}
-
-.copy-btn.disabled {
-  background: #ccc;
-}
-
-.copy-btn.success {
-  background: #4caf50;
-}
-
-.download-btn {
-  background: #ff9800;
-  color: white;
-}
-
-.action-hint {
-  text-align: center;
-  font-size: 12px;
-  color: #888;
-  margin-bottom: 16px;
-}
-
-.back-to-result {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  background: white;
-  color: #666;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.back-to-result:hover {
-  background: #f5f5f5;
-}
-
-/* ========== 반응형 ========== */
-@media (max-width: 400px) {
-  .contact-buttons {
-    grid-template-columns: repeat(2, 1fr);
-  }
+// ============================================
+// ProspectPage.jsx v20 - 고객발굴 페이지 컴포넌트
+// ARK-Genie v20 - 클릭 시 팝업 선택 (AI지니 스타일)
+// ============================================
+
+import React, { useState, useRef, useEffect } from 'react';
+import './ProspectPage.css';
+
+const API_SERVER = 'https://ark-genie-server.onrender.com';
+
+const ProspectPage = () => {
+  const [step, setStep] = useState('legal');
+  const [legalAgreed, setLegalAgreed] = useState(false);
+  const [receiptImage, setReceiptImage] = useState(null);
+  const [receiptPreview, setReceiptPreview] = useState(null);
+  const [namecardImage, setNamecardImage] = useState(null);
+  const [namecardPreview, setNamecardPreview] = useState(null);
+  const [gps, setGps] = useState(null);
+  const [gpsAddress, setGpsAddress] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [result, setResult] = useState(null);
+  const [selectedInsurance, setSelectedInsurance] = useState([]);
+  const [messageChannel, setMessageChannel] = useState(null);
+  const [generatedMessage, setGeneratedMessage] = useState('');
+  const [sendConsent, setSendConsent] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
   
-  .capture-area {
-    flex-direction: column;
-  }
-}
+  // 🆕 v20: 팝업 선택 상태
+  const [showCaptureModal, setShowCaptureModal] = useState(null); // 'receipt' | 'namecard' | null
+  
+  const [agentInfo] = useState({
+    name: '홍길동',
+    phone: '010-1234-5678',
+    company: '보험사'
+  });
+  
+  // 촬영용 / 갤러리용 ref
+  const receiptCameraRef = useRef(null);
+  const receiptGalleryRef = useRef(null);
+  const namecardCameraRef = useRef(null);
+  const namecardGalleryRef = useRef(null);
+  
+  useEffect(() => {
+    getGPS();
+  }, []);
+  
+  const getGPS = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          setGps(coords);
+          setGpsAddress(`위도: ${coords.lat.toFixed(4)}, 경도: ${coords.lng.toFixed(4)}`);
+        },
+        (error) => {
+          console.error('GPS 오류:', error);
+          setGpsAddress('위치 정보를 가져올 수 없습니다.');
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+  };
+  
+  const handleLegalAgree = () => {
+    if (!legalAgreed) {
+      alert('법적 사항에 동의해주세요.');
+      return;
+    }
+    setStep('input');
+  };
+  
+  const handleImageSelect = (e, type) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const previewUrl = URL.createObjectURL(file);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target.result;
+      
+      if (type === 'receipt') {
+        setReceiptImage(base64);
+        setReceiptPreview(previewUrl);
+      } else {
+        setNamecardImage(base64);
+        setNamecardPreview(previewUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+    
+    // 팝업 닫기
+    setShowCaptureModal(null);
+  };
+  
+  // 🆕 v20: 박스 클릭 시 팝업 열기
+  const openCaptureModal = (type) => {
+    setShowCaptureModal(type);
+  };
+  
+  // 🆕 v20: 촬영 선택
+  const handleCameraSelect = () => {
+    if (showCaptureModal === 'receipt') {
+      receiptCameraRef.current.click();
+    } else {
+      namecardCameraRef.current.click();
+    }
+  };
+  
+  // 🆕 v20: 갤러리 선택
+  const handleGallerySelect = () => {
+    if (showCaptureModal === 'receipt') {
+      receiptGalleryRef.current.click();
+    } else {
+      namecardGalleryRef.current.click();
+    }
+  };
+  
+  const startAnalysis = async () => {
+    if (!receiptImage && !namecardImage) {
+      alert('영수증 또는 명함을 선택해주세요.');
+      return;
+    }
+    
+    setStep('loading');
+    setLoading(true);
+    
+    try {
+      setLoadingMessage('📸 이미지 OCR 분석 중...');
+      
+      let receiptResult = null;
+      if (receiptImage) {
+        const receiptResponse = await fetch(`${API_SERVER}/api/analyze-prospect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: receiptImage,
+            imageType: 'receipt'
+          })
+        });
+        const receiptData = await receiptResponse.json();
+        if (receiptData.success && receiptData.data) {
+          receiptResult = receiptData.data;
+        }
+      }
+      
+      setLoadingMessage('📇 명함 정보 추출 중...');
+      
+      let namecardResult = null;
+      if (namecardImage) {
+        const namecardResponse = await fetch(`${API_SERVER}/api/analyze-prospect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: namecardImage,
+            imageType: 'businessCard'
+          })
+        });
+        const namecardData = await namecardResponse.json();
+        if (namecardData.success && namecardData.data) {
+          namecardResult = namecardData.data;
+        }
+      }
+      
+      setLoadingMessage('🎯 보험 분석 완료!');
+      
+      const combinedResult = mergeResults(receiptResult, namecardResult);
+      setResult(combinedResult);
+      
+      if (combinedResult.insuranceAnalysis?.mandatoryInsurance) {
+        setSelectedInsurance(combinedResult.insuranceAnalysis.mandatoryInsurance);
+      }
+      
+      setStep('result');
+      
+    } catch (error) {
+      console.error('분석 오류:', error);
+      alert('분석 중 오류가 발생했습니다: ' + error.message);
+      setStep('input');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const mergeResults = (receipt, namecard) => {
+    if (!receipt && !namecard) {
+      return {
+        extracted: {},
+        insuranceAnalysis: {
+          mandatoryInsurance: [],
+          recommendedInsurance: [],
+          salesPoints: []
+        }
+      };
+    }
+    
+    if (!receipt) return namecard;
+    if (!namecard) return receipt;
+    
+    return {
+      documentType: 'merged',
+      extracted: {
+        businessNumber: namecard.extracted?.businessNumber !== '미확인' 
+          ? namecard.extracted?.businessNumber 
+          : receipt.extracted?.businessNumber,
+        companyName: namecard.extracted?.companyName || receipt.extracted?.companyName,
+        ownerName: namecard.extracted?.ownerName || receipt.extracted?.ownerName,
+        address: receipt.extracted?.address || namecard.extracted?.address,
+        phone: receipt.extracted?.phone || namecard.extracted?.phone,
+        mobile: namecard.extracted?.mobile || '미확인',
+        email: namecard.extracted?.email || '미확인',
+        businessType: receipt.extracted?.businessType || namecard.extracted?.businessType,
+        position: namecard.extracted?.position
+      },
+      confidence: receipt.confidence === 'high' && namecard.confidence === 'high' ? 'high' : 'medium',
+      insuranceAnalysis: receipt.insuranceAnalysis || namecard.insuranceAnalysis
+    };
+  };
+  
+  const toggleInsurance = (type) => {
+    setSelectedInsurance(prev => 
+      prev.includes(type) 
+        ? prev.filter(t => t !== type)
+        : [...prev, type]
+    );
+  };
+  
+  const generateMessage = async (channel) => {
+    setMessageChannel(channel);
+    setGeneratedMessage('');
+    setSendConsent(false);
+    setCopySuccess(false);
+    
+    try {
+      const response = await fetch(`${API_SERVER}/api/generate-prospect-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prospectData: { ...result, selectedInsurance },
+          messageType: channel,
+          agentInfo
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setGeneratedMessage(data.message);
+        setStep('message');
+      } else {
+        alert('메시지 생성 실패: ' + data.error);
+      }
+    } catch (error) {
+      console.error('메시지 생성 실패:', error);
+      alert('메시지 생성 중 오류가 발생했습니다.');
+    }
+  };
+  
+  const copyToClipboard = async () => {
+    if (!sendConsent) {
+      alert('고객에게 정보 수신 동의를 받았는지 확인해주세요.');
+      return;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(generatedMessage);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 3000);
+    } catch (error) {
+      alert('복사에 실패했습니다.');
+    }
+  };
+  
+  const resetAll = () => {
+    setStep('legal');
+    setLegalAgreed(false);
+    setReceiptImage(null);
+    setReceiptPreview(null);
+    setNamecardImage(null);
+    setNamecardPreview(null);
+    setResult(null);
+    setSelectedInsurance([]);
+    setMessageChannel(null);
+    setGeneratedMessage('');
+    setSendConsent(false);
+  };
+  
+  const goBack = () => {
+    if (step === 'message') setStep('result');
+    else if (step === 'result') setStep('input');
+    else if (step === 'input') setStep('legal');
+  };
+  
+  return (
+    <div className="prospect-page">
+      {/* 헤더 */}
+      <header className="prospect-header">
+        <button className="back-btn" onClick={goBack}>←</button>
+        <h1>🎯 고객발굴</h1>
+        <button className="reset-btn" onClick={resetAll}>초기화</button>
+      </header>
+      
+      {/* 🆕 v20: 촬영/갤러리 선택 팝업 */}
+      {showCaptureModal && (
+        <div className="capture-modal-overlay" onClick={() => setShowCaptureModal(null)}>
+          <div className="capture-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{showCaptureModal === 'receipt' ? '🧾 영수증' : '📇 명함'} 추가</h3>
+            <button className="capture-modal-btn camera" onClick={handleCameraSelect}>
+              <span>📷</span> 카메라로 촬영
+            </button>
+            <button className="capture-modal-btn gallery" onClick={handleGallerySelect}>
+              <span>🖼️</span> 갤러리에서 선택
+            </button>
+            <button className="capture-modal-cancel" onClick={() => setShowCaptureModal(null)}>
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* 숨겨진 파일 입력 */}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        ref={receiptCameraRef}
+        onChange={(e) => handleImageSelect(e, 'receipt')}
+        style={{ display: 'none' }}
+      />
+      <input
+        type="file"
+        accept="image/*"
+        ref={receiptGalleryRef}
+        onChange={(e) => handleImageSelect(e, 'receipt')}
+        style={{ display: 'none' }}
+      />
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        ref={namecardCameraRef}
+        onChange={(e) => handleImageSelect(e, 'namecard')}
+        style={{ display: 'none' }}
+      />
+      <input
+        type="file"
+        accept="image/*"
+        ref={namecardGalleryRef}
+        onChange={(e) => handleImageSelect(e, 'namecard')}
+        style={{ display: 'none' }}
+      />
+      
+      {/* ========== 법적 동의 ========== */}
+      {step === 'legal' && (
+        <div className="legal-section">
+          <div className="legal-card">
+            <h2>⚖️ 법적 사항 안내</h2>
+            <p className="legal-intro">고객발굴 기능 사용 전 반드시 숙지해주세요.</p>
+            
+            <div className="legal-rules">
+              <div className="legal-rule">
+                <div className="rule-icon">1️⃣</div>
+                <div className="rule-content">
+                  <strong>정보 수신 동의 필수</strong>
+                  <p>"무료 분석표 보내드려도 될까요?" 동의를 먼저 받으세요.</p>
+                </div>
+              </div>
+              <div className="legal-rule">
+                <div className="rule-icon">2️⃣</div>
+                <div className="rule-content">
+                  <strong>특정 상품 언급 금지</strong>
+                  <p>특정 보험사/상품명을 언급하지 마세요.</p>
+                </div>
+              </div>
+              <div className="legal-rule">
+                <div className="rule-icon">3️⃣</div>
+                <div className="rule-content">
+                  <strong>추정 표현 사용</strong>
+                  <p>모든 수치는 "약", "추정" 표현을 사용합니다.</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="penalty-box">
+              <h3>⚠️ 위반 시 제재</h3>
+              <ul>
+                <li><strong>정보통신망법:</strong> 3천만원 과태료</li>
+                <li><strong>개인정보보호법:</strong> 5년 징역/5천만원</li>
+                <li><strong>금융소비자보호법:</strong> 수입 50% 과징금</li>
+              </ul>
+            </div>
+            
+            <label className="legal-checkbox">
+              <input
+                type="checkbox"
+                checked={legalAgreed}
+                onChange={(e) => setLegalAgreed(e.target.checked)}
+              />
+              <span>위 내용을 숙지했으며, 모든 법적 책임은 본인에게 있음을 이해합니다.</span>
+            </label>
+            
+            <button 
+              className={`legal-btn ${legalAgreed ? 'active' : ''}`}
+              onClick={handleLegalAgree}
+              disabled={!legalAgreed}
+            >
+              동의하고 시작하기
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* ========== 입력 ========== */}
+      {step === 'input' && (
+        <div className="input-section">
+          <div className="intro-banner">
+            <div className="tip-badge">💡 TIP</div>
+            <p>"사장님, 무료 분석표 보내드려도 될까요?"</p>
+            <p className="tip-sub">이 한마디가 법적 보호막입니다!</p>
+          </div>
+          
+          {/* 🆕 v20: 클릭 시 팝업 열기 */}
+          <div className="capture-area">
+            <div 
+              className={`capture-box ${receiptImage ? 'has-image' : ''}`}
+              onClick={() => openCaptureModal('receipt')}
+            >
+              {receiptImage && <div className="capture-status">✓ 완료</div>}
+              <div className="capture-icon">🧾</div>
+              <div className="capture-label">영수증</div>
+              <div className="capture-hint">터치하여 추가</div>
+            </div>
+            
+            <div 
+              className={`capture-box ${namecardImage ? 'has-image' : ''}`}
+              onClick={() => openCaptureModal('namecard')}
+            >
+              {namecardImage && <div className="capture-status">✓ 완료</div>}
+              <div className="capture-icon">📇</div>
+              <div className="capture-label">명함</div>
+              <div className="capture-hint">터치하여 추가</div>
+            </div>
+          </div>
+          
+          {/* 미리보기 */}
+          {(receiptPreview || namecardPreview) && (
+            <div className="preview-area">
+              {receiptPreview && (
+                <div className="preview-box">
+                  <img src={receiptPreview} alt="영수증" />
+                  <p>🧾 영수증 ✓</p>
+                </div>
+              )}
+              {namecardPreview && (
+                <div className="preview-box">
+                  <img src={namecardPreview} alt="명함" />
+                  <p>📇 명함 ✓</p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div className="gps-area">
+            <div className="gps-icon">📍</div>
+            <div className="gps-info">
+              <div className="gps-label">현재 위치</div>
+              <div className="gps-address">{gpsAddress || '위치 확인 중...'}</div>
+            </div>
+            <button className="gps-refresh" onClick={getGPS}>🔄</button>
+          </div>
+          
+          <button 
+            className="analyze-btn"
+            onClick={startAnalysis}
+            disabled={!receiptImage && !namecardImage}
+          >
+            <span>🔍</span>
+            <span>AI 분석 시작</span>
+          </button>
+        </div>
+      )}
+      
+      {/* ========== 로딩 ========== */}
+      {step === 'loading' && (
+        <div className="loading-section">
+          <div className="spinner"></div>
+          <p className="loading-text">{loadingMessage || 'AI가 분석 중입니다...'}</p>
+          <div className="loading-steps">
+            <div className={`loading-step ${loadingMessage.includes('OCR') ? 'active' : ''}`}>
+              📸 이미지 OCR 분석
+            </div>
+            <div className={`loading-step ${loadingMessage.includes('명함') ? 'active' : ''}`}>
+              📇 명함 정보 추출
+            </div>
+            <div className={`loading-step ${loadingMessage.includes('보험') ? 'active' : ''}`}>
+              🎯 보험 분석 완료
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ========== 결과 ========== */}
+      {step === 'result' && result && (
+        <div className="result-section">
+          <div className="data-source">
+            <div className="data-source-icon">📊</div>
+            <div className="data-source-text">
+              <strong>출처: 공공데이터포털</strong>
+              국세청 사업자정보 / 소방청 다중이용업소 기준
+            </div>
+          </div>
+          
+          <div className="result-card">
+            <h3>🏢 사업장 정보</h3>
+            <div className="info-grid">
+              <div className="info-row">
+                <span className="info-label">상호</span>
+                <span className="info-value">
+                  {result.extracted?.companyName || '-'}
+                  {result.confidence !== 'high' && <span className="estimate-badge">추정</span>}
+                </span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">대표</span>
+                <span className="info-value">{result.extracted?.ownerName || '-'}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">주소</span>
+                <span className="info-value">{result.extracted?.address || '-'}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">업종</span>
+                <span className="info-value">
+                  {result.extracted?.businessType || '-'}
+                  <span className="estimate-badge">추정</span>
+                </span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">연락처</span>
+                <span className="info-value">
+                  {result.extracted?.mobile !== '미확인' 
+                    ? result.extracted?.mobile 
+                    : result.extracted?.phone || '-'}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="result-card">
+            <h3>🎯 보험 분석 결과</h3>
+            
+            {result.insuranceAnalysis?.mandatoryInsurance?.length > 0 && (
+              <div className="insurance-section">
+                <div className="insurance-category required">🔴 의무가입 (추정)</div>
+                {result.insuranceAnalysis.mandatoryInsurance.map((ins, idx) => (
+                  <div key={idx} className="insurance-item required">
+                    <input
+                      type="checkbox"
+                      checked={selectedInsurance.includes(ins)}
+                      onChange={() => toggleInsurance(ins)}
+                    />
+                    <span className="insurance-name">{ins}</span>
+                    <span className="insurance-badge required">필수</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {result.insuranceAnalysis?.recommendedInsurance?.length > 0 && (
+              <div className="insurance-section">
+                <div className="insurance-category recommended">🟡 권장</div>
+                {result.insuranceAnalysis.recommendedInsurance.map((ins, idx) => (
+                  <div key={idx} className="insurance-item recommended">
+                    <input
+                      type="checkbox"
+                      checked={selectedInsurance.includes(ins)}
+                      onChange={() => toggleInsurance(ins)}
+                    />
+                    <span className="insurance-name">{ins}</span>
+                    <span className="insurance-badge recommended">권장</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {result.insuranceAnalysis?.salesPoints?.length > 0 && (
+              <div className="sales-points">
+                <h4>💡 영업 포인트</h4>
+                <ul>
+                  {result.insuranceAnalysis.salesPoints.map((point, idx) => (
+                    <li key={idx}>{point}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          <div className="result-card">
+            <h3>📨 연락하기</h3>
+            <div className="contact-buttons">
+              <button className="contact-btn" onClick={() => generateMessage('kakao')}>
+                <span className="contact-icon">💬</span>
+                <span className="contact-label">카카오톡</span>
+              </button>
+              <button className="contact-btn" onClick={() => generateMessage('sms')}>
+                <span className="contact-icon">📱</span>
+                <span className="contact-label">문자</span>
+              </button>
+              <button className="contact-btn" onClick={() => generateMessage('email')}>
+                <span className="contact-icon">📧</span>
+                <span className="contact-label">이메일</span>
+              </button>
+              <button className="contact-btn" onClick={() => generateMessage('letter')}>
+                <span className="contact-icon">📮</span>
+                <span className="contact-label">편지</span>
+              </button>
+            </div>
+            <p className="contact-hint">※ 메시지 생성 후 직접 발송하세요</p>
+          </div>
+          
+          <div className="disclaimer">※ 본 분석은 공공데이터 기준 참고용이며, 실제와 다를 수 있습니다.</div>
+        </div>
+      )}
+      
+      {/* ========== 메시지 ========== */}
+      {step === 'message' && (
+        <div className="message-section">
+          <div className="result-card message-card">
+            <h3>
+              📝 {messageChannel === 'kakao' ? '카카오톡' : 
+                  messageChannel === 'sms' ? '문자' : 
+                  messageChannel === 'email' ? '이메일' : '편지'} 메시지
+            </h3>
+            
+            <div className="generated-message">{generatedMessage}</div>
+            
+            <div className="send-warning">
+              <p>⚠️ 동의 없이 발송 시 <strong>정보통신망법 위반</strong></p>
+              <p><strong>3천만원 이하 과태료</strong> 대상</p>
+            </div>
+            
+            <label className="consent-checkbox">
+              <input
+                type="checkbox"
+                checked={sendConsent}
+                onChange={(e) => setSendConsent(e.target.checked)}
+              />
+              <span>고객에게 정보 수신 동의를 받았습니다</span>
+            </label>
+            
+            <div className="message-actions">
+              <button 
+                className={`copy-btn ${!sendConsent ? 'disabled' : ''} ${copySuccess ? 'success' : ''}`}
+                onClick={copyToClipboard}
+                disabled={!sendConsent}
+              >
+                {copySuccess ? '✅ 복사 완료!' : '📋 복사하기'}
+              </button>
+              
+              {messageChannel === 'letter' && (
+                <button 
+                  className="download-btn"
+                  onClick={() => {
+                    const blob = new Blob([generatedMessage], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `편지_${result.extracted?.companyName || '고객'}.txt`;
+                    a.click();
+                  }}
+                >
+                  📥 다운로드
+                </button>
+              )}
+            </div>
+            
+            <p className="action-hint">
+              {messageChannel === 'letter' ? '다운로드 후 출력하여 발송하세요.' : '복사 후 앱에서 직접 발송하세요.'}
+            </p>
+            
+            <button className="back-to-result" onClick={() => setStep('result')}>
+              ← 분석 결과로 돌아가기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ProspectPage;
