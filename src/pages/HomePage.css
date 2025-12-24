@@ -18,7 +18,7 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
   color: var(--text);
-  padding-bottom: 80px;
+  padding-bottom: 100px;
 }
 
 /* ===== 헤더 ===== */
@@ -232,6 +232,7 @@
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .calendar-header {
@@ -240,6 +241,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .calendar-back {
@@ -275,18 +277,20 @@
 .calendar-content {
   flex: 1;
   padding: 20px;
-  overflow-y: auto;
+  max-width: 500px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
+  gap: 2px;
   margin-bottom: 20px;
 }
 
 .calendar-day-header {
-  padding: 10px;
+  padding: 8px 4px;
   text-align: center;
   font-size: 12px;
   font-weight: 600;
@@ -298,12 +302,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
   color: var(--text);
+  max-width: 45px;
+  max-height: 45px;
+  margin: 0 auto;
 }
 
 .calendar-day:hover {
@@ -323,9 +330,9 @@
 .calendar-day.has-event::after {
   content: '';
   position: absolute;
-  bottom: 4px;
-  width: 5px;
-  height: 5px;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
   background: var(--primary);
   border-radius: 50%;
 }
@@ -340,6 +347,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 16px;
+  margin-top: 16px;
 }
 
 .calendar-event-title {
@@ -371,6 +379,7 @@
   align-items: center;
   justify-content: center;
   font-size: 18px;
+  flex-shrink: 0;
 }
 
 .calendar-event-icon.call {
@@ -406,4 +415,28 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* ===== 하단 네비게이션 다크 테마 오버라이드 ===== */
+.home-page ~ .bottom-nav,
+.home-page + .bottom-nav,
+body:has(.home-page) .bottom-nav,
+.bottom-nav {
+  background: var(--darker) !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.home-page ~ .bottom-nav .nav-item,
+.home-page + .bottom-nav .nav-item,
+body:has(.home-page) .bottom-nav .nav-item,
+.bottom-nav .nav-item {
+  color: var(--text-muted) !important;
+}
+
+.home-page ~ .bottom-nav .nav-item.active,
+.home-page + .bottom-nav .nav-item.active,
+body:has(.home-page) .bottom-nav .nav-item.active,
+.bottom-nav .nav-item.active {
+  color: var(--primary) !important;
 }
