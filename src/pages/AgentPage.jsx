@@ -778,8 +778,8 @@ function AgentPage() {
     setStatus('생각중...');
     
     try {
-      // 🔧 v25: 분석 컨텍스트 포함하여 전송
-      const response = await fetch(`${RENDER_SERVER}/api/chat`, {
+      // 🔧 v25.1: 분석 컨텍스트 포함하여 전송
+      const chatResponse = await fetch(`${RENDER_SERVER}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -787,10 +787,12 @@ function AgentPage() {
           analysisContext: analysisContextList.length > 0 ? analysisContextList : null
         })
       });
-      const data = await response.json();
-      addMessage(data.reply, false);
+      const chatData = await chatResponse.json();
+      // 🔧 v25.1: 서버 응답 필드명 수정 (reply → response)
+      addMessage(chatData.response || chatData.reply || '죄송합니다, 응답을 받지 못했습니다.', false);
     } catch (error) {
-      addMessage('네, 대표님!', false);
+      console.error('채팅 에러:', error);
+      addMessage('⚠️ 서버 연결 오류. 잠시 후 다시 시도해주세요.', false);
     }
     
     setStatus('대기중');
