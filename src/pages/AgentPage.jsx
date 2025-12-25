@@ -12,9 +12,32 @@ function AgentPage() {
   const [currentCall, setCurrentCall] = useState(null);
   const [callDuration, setCallDuration] = useState(0);
   const [pendingCall, setPendingCall] = useState(null); // 승인 대기 중인 전화
-  const [isAnalyzing, setIsAnalyzing] = useState(false); // 🆕 파일 분석 중 상태
-  const [showFileMenu, setShowFileMenu] = useState(false); // 🆕 파일 하위 메뉴 표시
-  const [analysisContextList, setAnalysisContextList] = useState([]); // 🆕 v15: 다중 파일 분석 결과 누적 저장
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // 파일 분석 중 상태
+  const [showFileMenu, setShowFileMenu] = useState(false); // 파일 하위 메뉴 표시
+  const [analysisContextList, setAnalysisContextList] = useState([]); // v15: 다중 파일 분석 결과 누적 저장
+  
+  // 🆕 v23: 타임라인 상태 추가 (실행 결과 기록)
+  const [timeline, setTimeline] = useState([]);
+  const [showTimeline, setShowTimeline] = useState(false);
+  
+  // 🆕 v23: 전화 실행 오버레이 상태
+  const [showCallOverlay, setShowCallOverlay] = useState(false);
+  const [callConversation, setCallConversation] = useState([]);
+  
+  // 🆕 v23: 소통 선택 UI 상태 (카톡/문자/이메일/팩스)
+  const [showCommOverlay, setShowCommOverlay] = useState(false);
+  const [commType, setCommType] = useState(null); // 'kakao', 'sms', 'email', 'fax'
+  const [commTarget, setCommTarget] = useState(null); // { name, phone, purpose }
+  const [commStatus, setCommStatus] = useState('ready'); // 'ready', 'sending', 'sent'
+  
+  // 🆕 v23: 소통 명령 대기 상태
+  const [pendingComm, setPendingComm] = useState(null); // { type, name, phone, message }
+  
+  // 🆕 v23: 녹음 상태
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [showReportOverlay, setShowReportOverlay] = useState(false);
+  const [reportData, setReportData] = useState(null);
   
   const chatAreaRef = useRef(null);
   const wsRef = useRef(null);
@@ -25,11 +48,12 @@ function AgentPage() {
   const audioQueueRef = useRef([]);
   const isPlayingRef = useRef(false);
   const isConnectedRef = useRef(false);
-  const lastCallInfoRef = useRef(null); // 🆕 마지막 전화 정보 (즉시 접근용)
-  const muteServerAudioRef = useRef(false); // 🆕 서버 음성 차단 플래그
-  const cameraInputRef = useRef(null); // 🆕 카메라 입력 ref
-  const imageInputRef = useRef(null); // 🆕 이미지 입력 ref
-  const fileInputRef = useRef(null); // 🆕 파일 입력 ref
+  const lastCallInfoRef = useRef(null); // 마지막 전화 정보 (즉시 접근용)
+  const muteServerAudioRef = useRef(false); // 서버 음성 차단 플래그
+  const cameraInputRef = useRef(null); // 카메라 입력 ref
+  const imageInputRef = useRef(null); // 이미지 입력 ref
+  const fileInputRef = useRef(null); // 파일 입력 ref
+  const recordingTimerRef = useRef(null); // 🆕 녹음 타이머 ref
 
   // 스크롤 자동 이동 (scrollIntoView 방식)
   const messagesEndRef = useRef(null);
@@ -78,6 +102,10 @@ function AgentPage() {
           }
           const name = currentCall?.name || '고객';
           const duration = formatDuration(callDuration);
+          
+          // 🆕 v23: 타임라인에 통화 종료 기록
+          addTimelineItem('call', `${name}님 통화 완료`, duration, 'success');
+          
           setCurrentCall(null);
           setCallDuration(0);
           setStatus('대기중');
@@ -92,27 +120,281 @@ function AgentPage() {
     return () => clearInterval(intervalId);
   }, [currentCall, callDuration]);
 
-  // 🆕 메시지 추가 (이미지 지원)
+  // 🆕 v23: 타임라인 아이템 추가 함수
+  const addTimelineItem = (type, content, detail = '', status = 'success') => {
+    const newItem = {
+      id: Date.now() + Math.random(),
+      type, // 'call', 'message', 'schedule', 'analysis'
+      content,
+      detail,
+      status, // 'success', 'working', 'pending'
+      time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    };
+    setTimeline(prev => [...prev, newItem]);
+    setShowTimeline(true);
+  };
+
+  // 🆕 v23: 타임라인 초기화
+  const clearTimeline = () => {
+    setTimeline([]);
+    setShowTimeline(false);
+  };
+
+  // 🆕 v23: 소통 명령 감지 (카톡/문자/이메일/팩스)
+  const checkCommCommand = (text) => {
+    let type = null;
+    if (text.includes('카톡') || text.includes('카카오')) type = 'kakao';
+    else if (text.includes('문자')) type = 'sms';
+    else if (text.includes('이메일') || text.includes('메일')) type = 'email';
+    else if (text.includes('팩스')) type = 'fax';
+    
+    if (!type) return null;
+    
+    // 이름 추출
+    let name = '고객';
+    const nameMatch = text.match(/([가-힣]{2,4})/g);
+    if (nameMatch) {
+      const excludeWords = ['카톡', '카카오', '문자', '이메일', '메일', '팩스', '보내', '전송', '해줘', '해주세요', '부탁', '고객'];
+      for (const n of nameMatch) {
+        if (!excludeWords.includes(n)) {
+          name = n;
+          break;
+        }
+      }
+    }
+    
+    // 전화번호 추출
+    const phoneMatch = text.match(/\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}/);
+    const phone = phoneMatch ? phoneMatch[0] : '010-0000-0000';
+    
+    return { type, name, phone };
+  };
+
+  // 🆕 v23: 전화 오버레이 열기
+  const openCallOverlay = (callInfo) => {
+    setCallConversation([]);
+    setShowCallOverlay(true);
+    
+    // AI 통화 시뮬레이션 시작
+    simulateCallConversation(callInfo);
+  };
+
+  // 🆕 v23: 전화 오버레이 닫기
+  const closeCallOverlay = () => {
+    setShowCallOverlay(false);
+    setCallConversation([]);
+  };
+
+  // 🆕 v23: AI 통화 시뮬레이션
+  const simulateCallConversation = async (callInfo) => {
+    const messages = [
+      { type: 'agent', text: `안녕하세요, ${callInfo.name}님. 오원트금융연구소 AI 비서입니다.` },
+      { type: 'customer', text: '네, 안녕하세요.' },
+      { type: 'agent', text: `설계사님께서 ${callInfo.purpose || '상담 일정'}을 조율해 달라고 하셨습니다. 이번 주 시간 괜찮으신가요?` },
+      { type: 'customer', text: '토요일 오후 2시는 어떨까요?' },
+      { type: 'agent', text: '네, 토요일 오후 2시로 예약하겠습니다. 감사합니다!' },
+      { type: 'customer', text: '네, 감사합니다.' }
+    ];
+    
+    for (const msg of messages) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!showCallOverlay) break; // 오버레이가 닫혔으면 중단
+      setCallConversation(prev => [...prev, msg]);
+    }
+  };
+
+  // 🆕 v23: 소통 오버레이 열기
+  const openCommOverlay = (type, target) => {
+    setCommType(type);
+    setCommTarget(target);
+    setCommStatus('ready');
+    setShowCommOverlay(true);
+  };
+
+  // 🆕 v23: 소통 오버레이 닫기
+  const closeCommOverlay = () => {
+    setShowCommOverlay(false);
+    setCommType(null);
+    setCommTarget(null);
+    setCommStatus('ready');
+  };
+
+  // 🆕 v23: 소통 발송 실행
+  const executeComm = async () => {
+    if (!commType || !commTarget) return;
+    
+    setCommStatus('sending');
+    
+    // 발송 시뮬레이션 (실제로는 API 호출)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setCommStatus('sent');
+    
+    // 타임라인에 기록
+    const typeLabels = { kakao: '카카오톡', sms: '문자', email: '이메일', fax: '팩스' };
+    addTimelineItem('message', `${commTarget.name}님께 ${typeLabels[commType]} 발송 완료`, '', 'success');
+    
+    // 1.5초 후 오버레이 닫기
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    closeCommOverlay();
+    
+    addMessage(`✅ ${commTarget.name}님께 ${typeLabels[commType]}을 발송했습니다.`, false);
+  };
+
+  // 🆕 v23: 소통 복명복창 카드 승인
+  const handleCommApprove = () => {
+    if (!pendingComm) return;
+    
+    console.log('✅ 소통 명령 승인:', pendingComm);
+    const commInfo = pendingComm;
+    setPendingComm(null);
+    
+    // 소통 오버레이 열기
+    openCommOverlay(commInfo.type, { name: commInfo.name, phone: commInfo.phone });
+    
+    // 바로 발송 시작
+    setTimeout(() => executeComm(), 500);
+  };
+
+  // 🆕 v23: 소통 복명복창 카드 취소
+  const handleCommCancel = () => {
+    console.log('❌ 소통 명령 취소');
+    setPendingComm(null);
+    addMessage('네, 발송을 취소했습니다.', false);
+  };
+
+  // 🆕 v23: 소통 타입별 정보
+  const getCommTypeInfo = (type) => {
+    const info = {
+      kakao: { icon: '💬', label: '카카오톡', color: '#FEE500', textColor: '#191919' },
+      sms: { icon: '📱', label: '문자', color: '#3B82F6', textColor: '#fff' },
+      email: { icon: '📧', label: '이메일', color: '#EC4899', textColor: '#fff' },
+      fax: { icon: '📠', label: '팩스', color: '#8B5CF6', textColor: '#fff' }
+    };
+    return info[type] || info.kakao;
+  };
+
+  // 🆕 v23: 녹음 시작
+  const startRecording = () => {
+    if (currentCall || isVoiceMode) return;
+    
+    setIsRecording(true);
+    setRecordingTime(0);
+    setStatus('녹음중...');
+    addMessage('🔴 상담 녹음을 시작합니다.', false);
+    
+    // 녹음 타이머 시작
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingTime(prev => prev + 1);
+    }, 1000);
+  };
+
+  // 🆕 v23: 녹음 종료
+  const stopRecording = () => {
+    if (!isRecording) return;
+    
+    // 타이머 정지
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    
+    const duration = recordingTime;
+    setIsRecording(false);
+    setRecordingTime(0);
+    setStatus('대기중');
+    
+    // 2초 이상 녹음했을 때만 보고서 생성
+    if (duration >= 2) {
+      addMessage(`🔴 녹음 완료! (${formatRecordingTime(duration)}) 보고서를 생성합니다...`, false);
+      
+      // 보고서 생성 (시뮬레이션)
+      setTimeout(() => {
+        generateReport(duration);
+      }, 1500);
+    } else {
+      addMessage('녹음 시간이 너무 짧습니다. 다시 시도해주세요.', false);
+    }
+  };
+
+  // 🆕 v23: 녹음 토글
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  // 🆕 v23: 녹음 시간 포맷
+  const formatRecordingTime = (seconds) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // 🆕 v23: 상담 보고서 생성
+  const generateReport = (duration) => {
+    const now = new Date();
+    const report = {
+      duration: formatRecordingTime(duration),
+      date: now.toLocaleString('ko-KR'),
+      summary: '고객이 종신보험 리모델링에 대해 문의함. 현재 가입 중인 보험의 보장 내용 확인 요청. 다음 주 화요일 오후 2시에 대면 상담 예약 완료.',
+      actionItems: [
+        '다음 주 화요일 14:00 대면 상담 일정 등록',
+        '현재 보험 증권 분석 자료 준비',
+        '리모델링 제안서 작성'
+      ]
+    };
+    
+    setReportData(report);
+    setShowReportOverlay(true);
+    
+    // 타임라인에 기록
+    addTimelineItem('analysis', '상담 보고서 생성 완료', report.duration, 'success');
+  };
+
+  // 🆕 v23: 보고서 오버레이 닫기
+  const closeReportOverlay = () => {
+    setShowReportOverlay(false);
+    setReportData(null);
+  };
+
+  // 🆕 v23: 보고서 카카오톡 전송
+  const sendReportToKakao = async () => {
+    addMessage('💬 상담 보고서를 내 카카오톡으로 전송합니다...', false);
+    
+    // 전송 시뮬레이션
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    closeReportOverlay();
+    addMessage('✅ 상담 보고서가 내 카카오톡으로 전송되었습니다.', false);
+    
+    // 타임라인에 기록
+    addTimelineItem('message', '보고서 카카오톡 전송 완료', '', 'success');
+  };
+
+  // 메시지 추가 (이미지 지원)
   const addMessage = (text, isUser, imageData = null) => {
     setMessages(prev => [...prev, {
       id: Date.now() + Math.random(),
       text,
       isUser,
-      imageData, // 🆕 이미지 데이터 (base64)
+      imageData,
       time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
     }]);
   };
 
-  // 🆕 v15: 분석 컨텍스트 초기화 함수
+  // v15: 분석 컨텍스트 초기화 함수
   const clearAnalysisContext = () => {
     setAnalysisContextList([]);
     addMessage('🗑️ 분석 기록이 초기화되었습니다. 새로운 파일을 업로드해주세요.', false);
     console.log('🗑️ [v15] 분석 컨텍스트 초기화');
   };
 
-  // 🆕 v15: 다중 파일 선택 핸들러 - 동시 업로드 + 누적 분석 지원
+  // v15: 다중 파일 선택 핸들러 - 동시 업로드 + 누적 분석 지원
   const handleFileSelect = async (event) => {
-    const files = Array.from(event.target.files); // 다중 파일 지원
+    const files = Array.from(event.target.files);
     if (!files || files.length === 0) return;
     
     // 지원 파일 형식 확인
@@ -166,7 +448,10 @@ function AgentPage() {
         // 분석 결과 표시
         addMessage(analysis, false);
         
-        // 🆕 v15: 분석 결과를 배열에 누적 저장
+        // 🆕 v23: 타임라인에 분석 완료 기록
+        addTimelineItem('analysis', `${fileName} 분석 완료`, fileType, 'success');
+        
+        // v15: 분석 결과를 배열에 누적 저장
         const contextData = {
           id: Date.now(),
           fileName: fileName,
@@ -179,7 +464,7 @@ function AgentPage() {
           const newList = [...prev, contextData];
           console.log(`📋 [v15] 분석 컨텍스트 누적: ${newList.length}개 파일`);
           
-          // 🆕 v15: 음성 모드 중이면 WebSocket으로 누적된 컨텍스트 전달
+          // v15: 음성 모드 중이면 WebSocket으로 누적된 컨텍스트 전달
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({
               type: 'update_context',
@@ -212,7 +497,7 @@ function AgentPage() {
     event.target.value = '';
   };
 
-  // 🆕 파일을 base64로 변환
+  // 파일을 base64로 변환
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -222,7 +507,7 @@ function AgentPage() {
     });
   };
 
-  // 🆕 파일 분석 API (이미지, PDF, 문서 모두 지원)
+  // 파일 분석 API (이미지, PDF, 문서 모두 지원)
   const analyzeFile = async (base64Data, fileName, fileType) => {
     try {
       const response = await fetch(`${RENDER_SERVER}/api/analyze-file`, {
@@ -378,14 +663,14 @@ function AgentPage() {
 
   // 보이스 모드 시작
   const startVoiceMode = async () => {
-    // 🆕 통화 중이면 음성모드 시작 금지
+    // 통화 중이면 음성모드 시작 금지
     if (currentCall) {
       console.log('⚠️ 통화 중에는 음성모드 시작 불가');
       return;
     }
     if (isConnectedRef.current) return;
     
-    // 🆕 v15.1: 음성모드 시작 시 이전 전화 정보 초기화 (버그 수정)
+    // v15.1: 음성모드 시작 시 이전 전화 정보 초기화 (버그 수정)
     lastCallInfoRef.current = null;
     setPendingCall(null);
     muteServerAudioRef.current = false;
@@ -405,10 +690,10 @@ function AgentPage() {
       
       ws.onopen = () => {
         console.log('✅ WebSocket 연결됨');
-        // 🆕 v15: 다중 분석 컨텍스트 전달
+        // v15: 다중 분석 컨텍스트 전달
         const startMessage = { 
           type: 'start_app',
-          analysisContextList: analysisContextList // 누적된 분석 결과 전달
+          analysisContextList: analysisContextList
         };
         ws.send(JSON.stringify(startMessage));
         console.log('📤 [v15] start_app 전송, 분석 파일 수:', analysisContextList.length);
@@ -425,7 +710,7 @@ function AgentPage() {
             startAudioCapture(stream, ws);
           }
           
-          // 🆕 서버 음성 차단 중이면 오디오 무시
+          // 서버 음성 차단 중이면 오디오 무시
           if (msg.type === 'audio' && msg.data) {
             if (muteServerAudioRef.current) {
               console.log('🔇 [DEBUG] 서버 음성 차단 중 - 오디오 무시');
@@ -439,7 +724,7 @@ function AgentPage() {
             console.log('🎤 [DEBUG] 사용자 음성 인식:', msg.text);
             addMessage(msg.text, true);
             
-            // 🆕 승인 대기 중인 전화가 있으면 승인/거절 확인 (lastCallInfoRef 사용)
+            // 승인 대기 중인 전화가 있으면 승인/거절 확인 (lastCallInfoRef 사용)
             console.log('🔍 [DEBUG] lastCallInfoRef 상태:', lastCallInfoRef.current);
             if (lastCallInfoRef.current) {
               console.log('🔍 [DEBUG] checkApproval 검사:', msg.text);
@@ -450,10 +735,9 @@ function AgentPage() {
                 // 승인됨 - 전화 발신
                 console.log('✅ [DEBUG] 전화 승인됨! makeCall 호출 예정:', lastCallInfoRef.current);
                 const callInfo = lastCallInfoRef.current;
-                lastCallInfoRef.current = null; // 사용 후 초기화
+                lastCallInfoRef.current = null;
                 setPendingCall(null);
-                muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
-                // 🆕 최종 복창 후 전화 발신
+                muteServerAudioRef.current = false;
                 addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
                 console.log('📞 [DEBUG] makeCall 호출 시작');
                 makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
@@ -464,7 +748,7 @@ function AgentPage() {
                 console.log('❌ 전화 거절됨');
                 lastCallInfoRef.current = null;
                 setPendingCall(null);
-                muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
+                muteServerAudioRef.current = false;
                 addMessage('네, 전화를 취소했습니다.', false);
                 return;
               } else {
@@ -477,17 +761,15 @@ function AgentPage() {
             console.log('🔍 [DEBUG] checkCallCommand 결과:', callInfo);
             if (callInfo) {
               console.log('📞 [DEBUG] 전화 명령 감지! 서버 음성 차단 시작');
-              // 🆕 서버 음성 차단 (서버가 "전화합니다" 말하는 것 방지)
               muteServerAudioRef.current = true;
               
               // 바로 전화하지 않고 승인 대기
               setPendingCall(callInfo);
-              lastCallInfoRef.current = callInfo; // 즉시 접근 가능하도록 ref에도 저장
+              lastCallInfoRef.current = callInfo;
               console.log('📞 [DEBUG] setPendingCall + lastCallInfoRef 완료');
-              // 🆕 프론트엔드에서 직접 복명복창 (서버 응답 무시)
               addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요? (네/아니오)`, false);
               console.log('📞 [DEBUG] 복명복창 메시지 추가 완료');
-              return; // 🆕 서버 응답 처리 중단
+              return;
             }
           }
           
@@ -495,7 +777,7 @@ function AgentPage() {
           if (msg.type === 'transcript' && msg.role === 'assistant') {
             console.log('🤖 [DEBUG] 지니 응답:', msg.text);
             
-            // 🆕 승인 대기 중이면 지니 응답 무시 (복명복창 우선)
+            // 승인 대기 중이면 지니 응답 무시 (복명복창 우선)
             if (lastCallInfoRef.current) {
               console.log('⚠️ [DEBUG] 승인 대기 중 - 지니 응답 무시:', msg.text);
               return;
@@ -570,33 +852,35 @@ function AgentPage() {
     cleanupVoiceMode();
     setIsVoiceMode(false);
     setStatus('대기중');
-    setPendingCall(null); // 대기 중인 전화도 취소
-    muteServerAudioRef.current = false; // 🆕 서버 음성 차단 해제
+    setPendingCall(null);
+    muteServerAudioRef.current = false;
   };
 
-  // 🆕 전화 걸기 (Realtime API 사용)
+  // 전화 걸기 (Realtime API 사용)
   const makeCall = async (name, phone, purpose = '상담 일정 예약') => {
     console.log('📞 [Realtime API] 전화 걸기:', name, phone, purpose);
     
     stopVoiceMode();
     setStatus('전화 연결중...');
     
-    // 🆕 v15.1: 전화 발신 시 이전 전화 정보 완전 초기화
+    // v15.1: 전화 발신 시 이전 전화 정보 완전 초기화
     lastCallInfoRef.current = null;
     setPendingCall(null);
+    
+    // 🆕 v23: 타임라인에 전화 시작 기록
+    addTimelineItem('call', `${name}님께 전화 연결 중...`, purpose, 'working');
     
     try {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
       
-      // 🆕 새로운 Realtime API 엔드포인트 사용
       const response = await fetch(`${RENDER_SERVER}/api/call-realtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           to: fullPhone, 
           customerName: name,
-          purpose: purpose  // 🆕 전화 목적 추가
+          purpose: purpose
         })
       });
       const data = await response.json();
@@ -646,6 +930,9 @@ function AgentPage() {
       }
     }
     
+    // 🆕 v23: 타임라인에 통화 종료 기록
+    addTimelineItem('call', `${name}님 통화 종료`, duration, 'success');
+    
     setCurrentCall(null);
     setCallDuration(0);
     setStatus('대기중');
@@ -657,6 +944,29 @@ function AgentPage() {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}분 ${s}초`;
+  };
+
+  // 🆕 v23: 복명복창 카드에서 승인 처리
+  const handleConfirmApprove = () => {
+    if (!pendingCall) return;
+    
+    console.log('✅ 복명복창 카드 승인:', pendingCall);
+    const callInfo = pendingCall;
+    setPendingCall(null);
+    lastCallInfoRef.current = null;
+    muteServerAudioRef.current = false;
+    
+    addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
+    makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
+  };
+
+  // 🆕 v23: 복명복창 카드에서 취소 처리
+  const handleConfirmCancel = () => {
+    console.log('❌ 복명복창 카드 취소');
+    setPendingCall(null);
+    lastCallInfoRef.current = null;
+    muteServerAudioRef.current = false;
+    addMessage('네, 전화를 취소했습니다.', false);
   };
 
   // 텍스트 전송
@@ -673,7 +983,6 @@ function AgentPage() {
         console.log('✅ 전화 승인됨 (텍스트):', pendingCall);
         const callInfo = pendingCall;
         setPendingCall(null);
-        // 🆕 최종 복창 후 전화 발신
         addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
         await makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
         return;
@@ -685,12 +994,33 @@ function AgentPage() {
       }
     }
     
+    // 🆕 v23: 승인 대기 중인 소통 명령이 있으면 승인/거절 확인
+    if (pendingComm) {
+      if (checkApproval(text)) {
+        handleCommApprove();
+        return;
+      } else if (checkRejection(text)) {
+        handleCommCancel();
+        return;
+      }
+    }
+    
     // 텍스트에서도 전화 명령 감지
     const callInfo = checkCallCommand(text);
     if (callInfo) {
       // 바로 전화하지 않고 승인 대기
       setPendingCall(callInfo);
       addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요?`, false);
+      return;
+    }
+    
+    // 🆕 v23: 소통 명령 감지 (카톡/문자/이메일/팩스)
+    const commInfo = checkCommCommand(text);
+    if (commInfo) {
+      // 바로 발송하지 않고 승인 대기
+      setPendingComm(commInfo);
+      const typeLabels = { kakao: '카카오톡', sms: '문자', email: '이메일', fax: '팩스' };
+      addMessage(`${commInfo.name}님께 ${typeLabels[commInfo.type]}을 보낼까요?`, false);
       return;
     }
     
@@ -709,6 +1039,17 @@ function AgentPage() {
     }
     
     setStatus('대기중');
+  };
+
+  // 🆕 v23: 타임라인 아이콘 반환
+  const getTimelineIcon = (type) => {
+    switch (type) {
+      case 'call': return '📞';
+      case 'message': return '💬';
+      case 'schedule': return '📅';
+      case 'analysis': return '🔍';
+      default: return '✅';
+    }
   };
 
   return (
@@ -747,61 +1088,176 @@ function AgentPage() {
         </div>
       )}
 
-      {/* 🆕 전화 승인 대기 배너 */}
+      {/* 🆕 v23: 녹음 바 */}
+      {isRecording && (
+        <div className="recording-bar">
+          <div className="recording-dot"></div>
+          <div className="recording-time">{formatRecordingTime(recordingTime)}</div>
+          <div className="recording-label">상담 녹음 중</div>
+          <button className="recording-stop-btn" onClick={stopRecording}>종료</button>
+        </div>
+      )}
+
+      {/* 기존 배너 형태 (롤백용 - 숨김 처리 가능) */}
+      {/* 
       {pendingCall && (
         <div className="pending-call-banner">
           <div className="pending-info">
             <span>📞 {pendingCall.name}님께 전화할까요?</span>
           </div>
           <div className="pending-buttons">
-            <button className="approve-btn" onClick={() => {
-              const callInfo = pendingCall;
-              setPendingCall(null);
-              makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
-            }}>네</button>
-            <button className="reject-btn" onClick={() => {
-              setPendingCall(null);
-              addMessage('네, 전화를 취소했습니다.', false);
-            }}>아니오</button>
+            <button className="approve-btn" onClick={handleConfirmApprove}>네</button>
+            <button className="reject-btn" onClick={handleConfirmCancel}>아니오</button>
           </div>
         </div>
       )}
+      */}
 
       <div className="chat-area" ref={chatAreaRef}>
-        {messages.length === 0 ? (
+        {messages.length === 0 && !pendingCall && !showTimeline ? (
           <div className="welcome-message">
             <div className="welcome-icon">🧞</div>
-            <h2>안녕하세요, 지니입니다!</h2>
-            <p>🎙️ 버튼 누르고 자유롭게 말씀하세요.</p>
-            <p>📎 파일 버튼으로 보험증권을 분석해보세요.</p>
+            <h2>안녕하세요, 대표님!</h2>
+            <h3>저는 대표님의 AI 비서 지니입니다.</h3>
+            <div className="welcome-guide">
+              <p>🎙️ "지니야" 하고 불러주시면 바로 응답해요</p>
+              <p>📞 "김철수님께 전화해줘" - 전화 연결</p>
+              <p>💬 "박영희님께 카톡 보내줘" - 메시지 발송</p>
+              <p>📎 보험증권을 첨부하면 분석해 드려요</p>
+              <p>🔴 상담 녹음하면 보고서를 만들어 드려요</p>
+            </div>
+            <p className="welcome-footer">무엇이든 편하게 말씀해 주세요! 💪</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
-              <div className="message-content">
-                {/* 🆕 이미지가 있으면 표시 */}
-                {msg.imageData && (
-                  <img 
-                    src={msg.imageData} 
-                    alt="업로드된 이미지" 
-                    className="message-image"
-                    onClick={() => window.open(msg.imageData, '_blank')}
-                  />
-                )}
-                <p>{msg.text}</p>
-                <span className="message-time">{msg.time}</span>
+          <>
+            {messages.map((msg) => (
+              <div key={msg.id} className={`message ${msg.isUser ? 'user' : 'ai'}`}>
+                <div className="message-content">
+                  {msg.imageData && (
+                    <img 
+                      src={msg.imageData} 
+                      alt="업로드된 이미지" 
+                      className="message-image"
+                      onClick={() => window.open(msg.imageData, '_blank')}
+                    />
+                  )}
+                  <p>{msg.text}</p>
+                  <span className="message-time">{msg.time}</span>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            
+            {/* 🆕 v23: 복명복창 카드 (시뮬레이터 UI) - 개선된 버전 */}
+            {pendingCall && (
+              <div className="confirm-card">
+                <div className="confirm-header">
+                  <span className="confirm-icon">🧞‍♂️</span>
+                  <h4>대표님, 확인해 주세요</h4>
+                </div>
+                <div className="confirm-content">
+                  <div className="confirm-main-text">
+                    <span className="highlight">{pendingCall.name}</span>님께 전화해드릴게요.
+                  </div>
+                  <div className="confirm-details">
+                    <div className="confirm-detail-row">
+                      <span className="detail-icon">📞</span>
+                      <span className="detail-text">{pendingCall.phone}</span>
+                    </div>
+                    <div className="confirm-detail-row">
+                      <span className="detail-icon">📋</span>
+                      <span className="detail-text">목적: {pendingCall.purpose}</span>
+                    </div>
+                    <div className="confirm-detail-row">
+                      <span className="detail-icon">⏰</span>
+                      <span className="detail-text">지금 바로 연결</span>
+                    </div>
+                  </div>
+                  <div className="confirm-question">
+                    진행할까요?
+                  </div>
+                </div>
+                <div className="confirm-buttons">
+                  <button className="confirm-btn cancel" onClick={handleConfirmCancel}>
+                    ❌ 취소
+                  </button>
+                  <button className="confirm-btn approve" onClick={handleConfirmApprove}>
+                    ✅ 승인
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* 🆕 v23: 소통 복명복창 카드 (카톡/문자/이메일/팩스) - 개선된 버전 */}
+            {pendingComm && (
+              <div className="confirm-card comm-card">
+                <div className="confirm-header">
+                  <span className="confirm-icon">{getCommTypeInfo(pendingComm.type).icon}</span>
+                  <h4>대표님, 확인해 주세요</h4>
+                </div>
+                <div className="confirm-content">
+                  <div className="confirm-main-text">
+                    <span className="highlight">{pendingComm.name}</span>님께 
+                    <span className="highlight"> {getCommTypeInfo(pendingComm.type).label}</span> 보내드릴게요.
+                  </div>
+                  <div className="confirm-details">
+                    <div className="confirm-detail-row">
+                      <span className="detail-icon">{getCommTypeInfo(pendingComm.type).icon}</span>
+                      <span className="detail-text">{pendingComm.phone}</span>
+                    </div>
+                    <div className="confirm-detail-row">
+                      <span className="detail-icon">📝</span>
+                      <span className="detail-text">안녕하세요, 지난번 상담 감사드립니다...</span>
+                    </div>
+                  </div>
+                  <div className="confirm-question">
+                    발송할까요?
+                  </div>
+                </div>
+                <div className="confirm-buttons">
+                  <button className="confirm-btn cancel" onClick={handleCommCancel}>
+                    ❌ 취소
+                  </button>
+                  <button className="confirm-btn approve" onClick={handleCommApprove}>
+                    ✅ 발송
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* 🆕 v23: 타임라인 카드 (실행 결과) */}
+            {showTimeline && timeline.length > 0 && (
+              <div className="timeline-card">
+                <div className="timeline-header">
+                  <span>📊</span>
+                  <h4>실행 결과</h4>
+                  <button className="timeline-clear" onClick={clearTimeline}>✕</button>
+                </div>
+                <div className="timeline-list">
+                  {timeline.map((item) => (
+                    <div key={item.id} className={`timeline-item ${item.status}`}>
+                      <span className="timeline-icon">{getTimelineIcon(item.type)}</span>
+                      <div className="timeline-content">
+                        <span className="timeline-text">{item.content}</span>
+                        {item.detail && <span className="timeline-detail">{item.detail}</span>}
+                      </div>
+                      <span className="timeline-time">{item.time}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
+        
         {/* 분석 중 표시 */}
         {isAnalyzing && (
           <div className="message ai">
             <div className="message-content">
-              <p>🔍 이미지를 분석하고 있습니다...</p>
+              <p>🔍 파일을 분석하고 있습니다...</p>
             </div>
           </div>
         )}
+        
         {/* 스크롤 타겟 */}
         <div ref={messagesEndRef} />
       </div>
@@ -812,7 +1268,7 @@ function AgentPage() {
       </div>
 
       <div className="input-area">
-        {/* 🆕 숨겨진 파일 입력들 */}
+        {/* 숨겨진 파일 입력들 */}
         <input
           type="file"
           ref={cameraInputRef}
@@ -838,7 +1294,7 @@ function AgentPage() {
           style={{ display: 'none' }}
         />
         
-        {/* 🆕 파일 하위 메뉴 (펼쳐졌을 때) */}
+        {/* 파일 하위 메뉴 (펼쳐졌을 때) */}
         {showFileMenu && (
           <div className="file-submenu">
             <button 
@@ -871,7 +1327,7 @@ function AgentPage() {
               <span>📁</span>
               <span>파일첨부</span>
             </button>
-            {/* 🆕 v15: 분석 초기화 버튼 */}
+            {/* v15: 분석 초기화 버튼 */}
             {analysisContextList.length > 0 && (
               <button 
                 className="submenu-btn submenu-clear"
@@ -893,7 +1349,7 @@ function AgentPage() {
           </div>
         )}
         
-        {/* 🆕 상단 버튼 행: 파일, 보이스, 녹음 */}
+        {/* 상단 버튼 행: 파일, 보이스, 녹음 */}
         <div className="action-buttons">
           <button 
             className={`action-btn ${showFileMenu ? 'active' : ''}`}
@@ -911,9 +1367,13 @@ function AgentPage() {
             <span className="action-icon">{isVoiceMode ? '🔴' : '🎤'}</span>
             <span className="action-label">보이스</span>
           </button>
-          <button className="action-btn" disabled={!!currentCall || isVoiceMode || isAnalyzing}>
-            <span className="action-icon">🔴</span>
-            <span className="action-label">녹음</span>
+          <button 
+            className={`action-btn ${isRecording ? 'recording' : ''}`}
+            onClick={toggleRecording}
+            disabled={!!currentCall || isVoiceMode || isAnalyzing}
+          >
+            <span className="action-icon">{isRecording ? '⏹️' : '🔴'}</span>
+            <span className="action-label">{isRecording ? '중지' : '녹음'}</span>
           </button>
         </div>
         
@@ -930,6 +1390,144 @@ function AgentPage() {
           <button className="send-btn" onClick={handleSend} disabled={isVoiceMode || isAnalyzing}>➤</button>
         </div>
       </div>
+
+      {/* 🆕 v23: 전화 실행 오버레이 */}
+      {showCallOverlay && currentCall && (
+        <div className="exec-overlay show">
+          <div className="exec-header call">
+            <button className="exec-back" onClick={closeCallOverlay}>←</button>
+            <div className="exec-title">📞 AI 전화</div>
+          </div>
+          <div className="exec-content">
+            <div className="call-exec">
+              <div className="call-avatar-large">{currentCall.name?.charAt(0) || '?'}</div>
+              <div className="call-name-large">{currentCall.name}</div>
+              <div className="call-number-large">{currentCall.phone}</div>
+              <div className="call-status-indicator">
+                <div className="status-dot"></div>
+                <span>AI 통화 중</span>
+              </div>
+              <div className="call-timer-large">{formatDuration(callDuration)}</div>
+            </div>
+            <div className="call-conversation">
+              {callConversation.map((msg, idx) => (
+                <div key={idx} className={`conv-bubble ${msg.type}`}>
+                  {msg.text}
+                </div>
+              ))}
+            </div>
+            <div className="call-controls">
+              <button className="call-ctrl-btn mute">🔇</button>
+              <button className="call-ctrl-btn end" onClick={() => { closeCallOverlay(); endCall(); }}>📵</button>
+              <button className="call-ctrl-btn speaker">🔊</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 v23: 소통 실행 오버레이 (카톡/문자/이메일/팩스) */}
+      {showCommOverlay && commTarget && (
+        <div className="exec-overlay show">
+          <div className={`exec-header ${commType}`} style={{ 
+            background: commType === 'kakao' 
+              ? 'linear-gradient(135deg, #FEE500, #E5CF00)' 
+              : commType === 'sms'
+              ? 'linear-gradient(135deg, #3B82F6, #2563eb)'
+              : commType === 'email'
+              ? 'linear-gradient(135deg, #EC4899, #db2777)'
+              : 'linear-gradient(135deg, #8B5CF6, #7c3aed)'
+          }}>
+            <button 
+              className="exec-back" 
+              onClick={closeCommOverlay}
+              style={{ color: commType === 'kakao' ? '#191919' : '#fff' }}
+            >←</button>
+            <div 
+              className="exec-title"
+              style={{ color: commType === 'kakao' ? '#191919' : '#fff' }}
+            >
+              {getCommTypeInfo(commType).icon} {getCommTypeInfo(commType).label} 발송
+            </div>
+          </div>
+          <div className="exec-content">
+            <div className="msg-exec">
+              <div className="msg-recipient">
+                <div className="msg-avatar">{commTarget.name?.charAt(0) || '?'}</div>
+                <div className="msg-info">
+                  <h4>{commTarget.name}</h4>
+                  <p>{commTarget.phone}</p>
+                </div>
+              </div>
+              <div className="msg-preview">
+                <div className="msg-preview-header">📝 발송 내용</div>
+                <div className="msg-preview-content">
+                  안녕하세요, {commTarget.name}님!<br /><br />
+                  지난번 상담 감사드립니다.<br />
+                  추가 문의사항 있으시면 연락 주세요.<br /><br />
+                  - 오원트금융연구소 드림
+                </div>
+              </div>
+              <div className={`msg-status ${commStatus}`}>
+                {commStatus === 'ready' && (
+                  <>
+                    <div className="msg-status-icon">📤</div>
+                    <div className="msg-status-text">발송 준비 완료</div>
+                  </>
+                )}
+                {commStatus === 'sending' && (
+                  <>
+                    <div className="msg-status-icon spinning">⏳</div>
+                    <div className="msg-status-text">발송 중...</div>
+                  </>
+                )}
+                {commStatus === 'sent' && (
+                  <>
+                    <div className="msg-status-icon">✅</div>
+                    <div className="msg-status-text">{getCommTypeInfo(commType).label} 발송 완료!</div>
+                    <div className="msg-status-sub">{new Date().toLocaleTimeString('ko-KR')}</div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 v23: 상담 보고서 오버레이 */}
+      {showReportOverlay && reportData && (
+        <div className="report-overlay show">
+          <div className="report-header">
+            <button className="exec-back" onClick={closeReportOverlay}>←</button>
+            <div className="exec-title">📋 상담 보고서</div>
+          </div>
+          <div className="report-content">
+            <div className="report-card">
+              <h4>📊 상담 개요</h4>
+              <div className="report-info">
+                <p>• 상담 시간: {reportData.duration}</p>
+                <p>• 상담 일시: {reportData.date}</p>
+                <p>• 고객명: 미지정</p>
+              </div>
+            </div>
+            <div className="report-card">
+              <h4>📝 상담 요약</h4>
+              <p className="report-summary">{reportData.summary}</p>
+            </div>
+            <div className="report-card">
+              <h4>✅ 액션 아이템</h4>
+              <ul className="report-actions">
+                {reportData.actionItems.map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="report-footer">
+            <button className="report-btn secondary" onClick={closeReportOverlay}>닫기</button>
+            <button className="report-btn primary" onClick={sendReportToKakao}>💬 내 카톡으로 전송</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
