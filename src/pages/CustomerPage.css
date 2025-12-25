@@ -1,201 +1,384 @@
+/* CustomerPage.css - 다크테마 */
+
 .customer-page {
-  padding: 16px;
-  padding-bottom: 100px;
-  position: relative;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+  color: #ffffff;
 }
 
-.financial-house-banner {
-  background: linear-gradient(135deg, #1a3a5c, #2d5a8c);
-  border-radius: 20px;
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  color: white;
-}
-
-.banner-content {
+/* 헤더 */
+.customer-page .app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 50px 20px 18px;
   display: flex;
   align-items: center;
-  gap: 14px;
-}
-
-.banner-icon {
-  font-size: 36px;
-}
-
-.banner-text h3 {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 2px;
-}
-
-.banner-text p {
-  font-size: 13px;
-  opacity: 0.8;
-}
-
-.banner-btn {
-  background: #d4af37;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.search-bar {
-  background: white;
-  border-radius: 14px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
-
-.search-icon {
-  font-size: 18px;
-}
-
-.search-bar input {
-  flex: 1;
-  border: none;
-  font-size: 15px;
-  outline: none;
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.filter-tab {
-  background: white;
-  border: 2px solid #e5e8eb;
-  border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #666;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.filter-tab.active {
-  background: #1a3a5c;
-  border-color: #1a3a5c;
-  color: white;
-}
-
-.customer-list {
-  display: flex;
-  flex-direction: column;
   gap: 12px;
 }
 
-.customer-card {
-  background: white;
-  border-radius: 16px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
-
-.customer-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1a3a5c, #2d5a8c);
-  color: white;
+.customer-page .header-logo {
+  width: 42px;
+  height: 42px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 24px;
+}
+
+.customer-page .header-info {
+  flex: 1;
+}
+
+.customer-page .header-info h1 {
   font-size: 18px;
   font-weight: 700;
-  flex-shrink: 0;
+  margin: 0;
+}
+
+.customer-page .header-info p {
+  font-size: 11px;
+  opacity: 0.8;
+  margin: 0;
+}
+
+.customer-page .header-status {
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 콘텐츠 */
+.customer-page .content {
+  padding: 20px;
+  padding-bottom: 100px;
+  background: #12121a;
+  min-height: calc(100vh - 110px);
+}
+
+/* 고객 헤더 */
+.customer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.customer-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.customer-count {
+  background: #667eea;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 업로드 영역 */
+.upload-area {
+  background: rgba(255,255,255,0.05);
+  border: 2px dashed rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 40px 20px;
+  text-align: center;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.upload-area:hover {
+  border-color: #667eea;
+  background: rgba(102,126,234,0.1);
+}
+
+.upload-area .icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.upload-area h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.upload-area p {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.upload-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.upload-btn {
+  padding: 12px 18px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-btn:hover {
+  background: #667eea;
+  border-color: #667eea;
+  transform: translateY(-2px);
+}
+
+/* 구글시트 연동 상태 */
+.sheet-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.2));
+  border: 1px solid rgba(16,185,129,0.3);
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sheet-status:hover {
+  background: linear-gradient(135deg, rgba(16,185,129,0.3), rgba(5,150,105,0.3));
+}
+
+.sheet-status .icon {
+  font-size: 22px;
+}
+
+.sheet-status .info {
+  flex: 1;
+}
+
+.sheet-status .info .title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sheet-status .info .time {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+}
+
+.sheet-status .check {
+  color: #10b981;
+  font-size: 20px;
+}
+
+/* 고객 리스트 */
+.customer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.customer-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 4px solid #667eea;
+}
+
+.customer-card:hover {
+  transform: translateX(5px);
+  background: rgba(102,126,234,0.1);
+}
+
+.customer-card.hot {
+  border-left-color: #ef4444;
+}
+
+.customer-card.new {
+  border-left-color: #10b981;
+}
+
+.customer-avatar {
+  width: 46px;
+  height: 46px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .customer-info {
   flex: 1;
-  min-width: 0;
 }
 
-.customer-name-row {
+.customer-info h4 {
+  font-size: 15px;
+  margin: 0 0 3px 0;
+}
+
+.customer-info p {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  margin: 0 0 4px 0;
+}
+
+.customer-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+}
+
+.customer-tag.hot {
+  background: rgba(239,68,68,0.2);
+  color: #fca5a5;
+}
+
+.customer-tag.new {
+  background: rgba(16,185,129,0.2);
+  color: #6ee7b7;
+}
+
+.customer-next {
+  text-align: right;
+}
+
+.customer-next .label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+}
+
+/* 시트 오버레이 */
+.sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #12121a;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-header {
+  background: linear-gradient(135deg, #10b981, #059669);
+  padding: 50px 20px 18px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.customer-name-row h4 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1a3a5c;
-}
-
-.customer-status {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 10px;
-  background: #e5e8eb;
-  color: #666;
-}
-
-.customer-status.vip {
-  background: linear-gradient(135deg, #d4af37, #f4d03f);
-  color: white;
-}
-
-.customer-status.신규 {
-  background: #27ae60;
-  color: white;
-}
-
-.customer-meta {
-  display: flex;
   gap: 12px;
-  font-size: 12px;
-  color: #666;
 }
 
-.customer-action {
+.sheet-back {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: #f5f7fa;
+  background: rgba(255,255,255,0.2);
   border: none;
-  font-size: 16px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 18px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.fab-button {
-  position: fixed;
-  bottom: 100px;
-  right: 24px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #d4af37, #f4d03f);
+.sheet-title {
+  font-size: 18px;
+  font-weight: 700;
+  flex: 1;
+}
+
+.sheet-download {
+  padding: 8px 14px;
+  background: rgba(255,255,255,0.2);
   border: none;
-  color: white;
-  font-size: 28px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(212, 175, 55, 0.4);
+}
+
+.sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+}
+
+.sheet-info {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 15px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+}
+
+.sheet-info .icon {
+  font-size: 24px;
+}
+
+.sheet-info .text {
+  flex: 1;
+}
+
+.sheet-info .text .title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sheet-info .text .sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+}
+
+.sheet-table {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sheet-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 100px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  font-size: 12px;
+}
+
+.sheet-row:last-child {
+  border-bottom: none;
+}
+
+.sheet-row.header {
+  background: rgba(16,185,129,0.2);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.sheet-cell {
+  padding: 12px 10px;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.sheet-cell:last-child {
+  border-right: none;
 }
