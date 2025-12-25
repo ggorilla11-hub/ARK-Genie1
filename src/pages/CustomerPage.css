@@ -1,14 +1,30 @@
-/* CustomerPage.css - 다크테마 */
+/* ===== CustomerPage.css - 시뮬레이터 기준 다크 테마 ===== */
+
+:root {
+  --primary: #667eea;
+  --secondary: #764ba2;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --gold: #fbbf24;
+  --dark: #1a1a2e;
+  --darker: #12121a;
+  --card: rgba(255,255,255,0.05);
+  --border: rgba(255,255,255,0.1);
+  --text: #ffffff;
+  --text-muted: rgba(255,255,255,0.6);
+}
 
 .customer-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-  color: #ffffff;
+  color: var(--text);
+  padding-bottom: 100px;
 }
 
-/* 헤더 */
+/* ===== 헤더 ===== */
 .customer-page .app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   padding: 50px 20px 18px;
   display: flex;
   align-items: center;
@@ -33,32 +49,35 @@
 .customer-page .header-info h1 {
   font-size: 18px;
   font-weight: 700;
+  color: #fff;
   margin: 0;
 }
 
 .customer-page .header-info p {
   font-size: 11px;
   opacity: 0.8;
+  color: #fff;
   margin: 0;
 }
 
 .customer-page .header-status {
   padding: 8px 16px;
   background: rgba(255,255,255,0.2);
+  border: none;
   border-radius: 20px;
+  color: #fff;
   font-size: 12px;
   font-weight: 600;
 }
 
-/* 콘텐츠 */
+/* ===== 콘텐츠 ===== */
 .customer-page .content {
   padding: 20px;
-  padding-bottom: 100px;
-  background: #12121a;
+  background: var(--darker);
   min-height: calc(100vh - 110px);
 }
 
-/* 고객 헤더 */
+/* ===== 고객 헤더 ===== */
 .customer-header {
   display: flex;
   justify-content: space-between;
@@ -70,30 +89,32 @@
   font-size: 18px;
   font-weight: 700;
   margin: 0;
+  color: var(--text);
 }
 
 .customer-count {
-  background: #667eea;
+  background: var(--primary);
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
+  color: #fff;
 }
 
-/* 업로드 영역 */
+/* ===== 업로드 영역 ===== */
 .upload-area {
-  background: rgba(255,255,255,0.05);
-  border: 2px dashed rgba(255,255,255,0.1);
+  background: var(--card);
+  border: 2px dashed var(--border);
   border-radius: 20px;
-  padding: 40px 20px;
+  padding: 30px 20px;
   text-align: center;
   margin-bottom: 15px;
-  cursor: pointer;
   transition: all 0.3s;
+  cursor: pointer;
 }
 
 .upload-area:hover {
-  border-color: #667eea;
+  border-color: var(--primary);
   background: rgba(102,126,234,0.1);
 }
 
@@ -104,13 +125,14 @@
 
 .upload-area h3 {
   font-size: 16px;
-  margin-bottom: 8px;
+  margin: 0 0 8px 0;
+  color: var(--text);
 }
 
 .upload-area p {
   font-size: 12px;
-  color: rgba(255,255,255,0.6);
-  margin-bottom: 20px;
+  color: var(--text-muted);
+  margin: 0 0 20px 0;
   line-height: 1.5;
 }
 
@@ -124,21 +146,24 @@
 .upload-btn {
   padding: 12px 18px;
   background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  color: #ffffff;
+  color: var(--text);
   font-size: 13px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   transition: all 0.2s;
 }
 
 .upload-btn:hover {
-  background: #667eea;
-  border-color: #667eea;
+  background: var(--primary);
+  border-color: var(--primary);
   transform: translateY(-2px);
 }
 
-/* 구글시트 연동 상태 */
+/* ===== 구글시트 연동 상태 ===== */
 .sheet-status {
   display: flex;
   align-items: center;
@@ -167,19 +192,20 @@
 .sheet-status .info .title {
   font-size: 13px;
   font-weight: 600;
+  color: var(--text);
 }
 
 .sheet-status .info .time {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: var(--text-muted);
 }
 
 .sheet-status .check {
-  color: #10b981;
+  color: var(--success);
   font-size: 20px;
 }
 
-/* 고객 리스트 */
+/* ===== 고객 리스트 ===== */
 .customer-list {
   display: flex;
   flex-direction: column;
@@ -187,8 +213,8 @@
 }
 
 .customer-card {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 14px 16px;
   display: flex;
@@ -196,7 +222,7 @@
   gap: 14px;
   cursor: pointer;
   transition: all 0.2s;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--primary);
 }
 
 .customer-card:hover {
@@ -205,23 +231,25 @@
 }
 
 .customer-card.hot {
-  border-left-color: #ef4444;
+  border-left-color: var(--danger);
 }
 
 .customer-card.new {
-  border-left-color: #10b981;
+  border-left-color: var(--success);
 }
 
 .customer-avatar {
   width: 46px;
   height: 46px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
   font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .customer-info {
@@ -231,11 +259,12 @@
 .customer-info h4 {
   font-size: 15px;
   margin: 0 0 3px 0;
+  color: var(--text);
 }
 
 .customer-info p {
   font-size: 12px;
-  color: rgba(255,255,255,0.6);
+  color: var(--text-muted);
   margin: 0 0 4px 0;
 }
 
@@ -245,6 +274,7 @@
   padding: 2px 8px;
   border-radius: 8px;
   background: rgba(255,255,255,0.1);
+  color: var(--text-muted);
 }
 
 .customer-tag.hot {
@@ -262,18 +292,24 @@
 }
 
 .customer-next .label {
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
-/* 시트 오버레이 */
+.customer-next .date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ===== 시트 오버레이 ===== */
 .sheet-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: #12121a;
+  background: var(--darker);
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -296,12 +332,16 @@
   color: #fff;
   font-size: 18px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sheet-title {
   font-size: 18px;
   font-weight: 700;
   flex: 1;
+  color: #fff;
 }
 
 .sheet-download {
@@ -313,6 +353,13 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheet-download:hover {
+  background: rgba(255,255,255,0.3);
 }
 
 .sheet-content {
@@ -322,8 +369,8 @@
 }
 
 .sheet-info {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 15px;
@@ -343,16 +390,17 @@
 .sheet-info .text .title {
   font-size: 14px;
   font-weight: 600;
+  color: var(--text);
 }
 
 .sheet-info .text .sub {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: var(--text-muted);
 }
 
 .sheet-table {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -360,7 +408,7 @@
 .sheet-row {
   display: grid;
   grid-template-columns: 80px 1fr 100px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
 }
 
@@ -376,9 +424,48 @@
 
 .sheet-cell {
   padding: 12px 10px;
-  border-right: 1px solid rgba(255,255,255,0.1);
+  border-right: 1px solid var(--border);
+  color: var(--text);
 }
 
 .sheet-cell:last-child {
   border-right: none;
+}
+
+/* 로딩 오버레이 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.loading-spinner {
+  font-size: 48px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading-overlay p {
+  margin-top: 15px;
+  font-size: 16px;
+  color: #fff;
+}
+
+/* 시트 빈 상태 */
+.sheet-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: rgba(255,255,255,0.6);
 }
