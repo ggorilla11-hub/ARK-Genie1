@@ -597,11 +597,11 @@ function AgentPage() {
       const formattedPhone = phone.replace(/[-\s]/g, '');
       const fullPhone = formattedPhone.startsWith('0') ? '+82' + formattedPhone.slice(1) : formattedPhone;
       
-      const response = await fetch(`${RENDER_SERVER}/api/call-realtime`, {
+      const response = await fetch(`${RENDER_SERVER}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          to: fullPhone, 
+          phoneNumber: fullPhone, 
           customerName: name,
           purpose: purpose
         })
