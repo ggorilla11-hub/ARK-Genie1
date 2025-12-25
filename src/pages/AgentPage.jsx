@@ -516,6 +516,10 @@ function AgentPage() {
         ws.send(JSON.stringify(startMessage));
       };
       
+      // 🔧 v25.3: 대기 중인 AI 응답 저장용
+      let pendingAIResponse = null;
+      let userTranscriptReceived = false;
+      
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
@@ -531,10 +535,34 @@ function AgentPage() {
             playAudio(msg.data);
           }
           
+          // 🔧 v25.3: AI 응답이 먼저 오면 대기
+          if (msg.type === 'transcript' && msg.role === 'assistant') {
+            if (lastCallInfoRef.current) return; // 전화 대기 중엔 AI 응답 무시
+            
+            if (!userTranscriptReceived) {
+              // 사용자 음성이 아직 안 왔으면 대기
+              pendingAIResponse = msg.text;
+              console.log('⏳ AI 응답 대기:', msg.text?.substring(0, 20));
+            } else {
+              // 사용자 음성이 먼저 왔으면 바로 표시
+              addMessage(msg.text, false);
+              userTranscriptReceived = false; // 리셋
+            }
+          }
+          
           if (msg.type === 'transcript' && msg.role === 'user') {
+            userTranscriptReceived = true;
             addMessage(msg.text, true);
             
-            // 🔧 v25: 전화 승인 대기 중일 때
+            // 🔧 v25.3: 대기 중이던 AI 응답 표시
+            if (pendingAIResponse) {
+              setTimeout(() => {
+                addMessage(pendingAIResponse, false);
+                pendingAIResponse = null;
+              }, 100);
+            }
+            
+            // 전화 승인 대기 중일 때
             if (lastCallInfoRef.current) {
               if (checkApproval(msg.text)) {
                 const callInfo = lastCallInfoRef.current;
@@ -571,11 +599,6 @@ function AgentPage() {
               addMessage(`${commInfo.name}님께 ${typeLabels[commInfo.type]}을 보낼까요? (네/아니오)`, false);
               return;
             }
-          }
-          
-          if (msg.type === 'transcript' && msg.role === 'assistant') {
-            if (lastCallInfoRef.current) return; // 전화 대기 중엔 AI 응답 무시
-            addMessage(msg.text, false);
           }
           
           if (msg.type === 'interrupt') {
