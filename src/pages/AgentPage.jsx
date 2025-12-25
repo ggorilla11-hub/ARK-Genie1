@@ -778,7 +778,7 @@ function AgentPage() {
     setStatus('생각중...');
     
     try {
-      // 🔧 v25.1: 분석 컨텍스트 포함하여 전송
+      // 🔧 v25.2: 분석 컨텍스트 포함하여 전송
       const chatResponse = await fetch(`${RENDER_SERVER}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -788,8 +788,18 @@ function AgentPage() {
         })
       });
       const chatData = await chatResponse.json();
-      // 🔧 v25.1: 서버 응답 필드명 수정 (reply → response)
-      addMessage(chatData.response || chatData.reply || '죄송합니다, 응답을 받지 못했습니다.', false);
+      
+      // 🔧 v25.2: 디버깅 로그 추가
+      console.log('📨 서버 응답:', chatData);
+      
+      // 🔧 v25.2: success 체크 추가
+      if (chatData.success && chatData.response) {
+        addMessage(chatData.response, false);
+      } else if (chatData.error) {
+        addMessage(`⚠️ ${chatData.error}`, false);
+      } else {
+        addMessage('죄송합니다, 응답을 받지 못했습니다.', false);
+      }
     } catch (error) {
       console.error('채팅 에러:', error);
       addMessage('⚠️ 서버 연결 오류. 잠시 후 다시 시도해주세요.', false);
