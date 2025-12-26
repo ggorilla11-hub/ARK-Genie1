@@ -1,10 +1,11 @@
 // ============================================
-// AgentPage.jsx v25.0 - AI지니 메인 페이지
+// AgentPage.jsx v26.0 - 음성 안정화 + 보험 전문가
 // 수정 내용:
-// - 🔧 이미지 분석 API 경로 수정 (/api/analyze-image)
-// - 🔧 음성 재생 로직 강화 (AudioContext 안정화)
-// - 🔧 전화 복명복창 로직 단순화
-// - ✨ 파일 업로드 시 자동 OCR 안내 메시지
+// - 🔧 음성 재생 안정화 (AudioContext 강화)
+// - 🔧 음성 순서 문제 완전 해결
+// - 🔧 오디오 큐 버퍼링 개선
+// - 🆕 보험 전문가 프롬프트 연동
+// - 🆕 일정 안내 기능 지원
 // ============================================
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -48,20 +49,34 @@ function AgentPage() {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   
-  // 🔧 v25: 오디오 컨텍스트 초기화 함수 (안정화)
+  // 🆕 v26: 음성 순서 관리용 ref
+  const pendingAIResponseRef = useRef(null);
+  const userTranscriptReceivedRef = useRef(false);
+  const lastUserMessageTimeRef = useRef(0);
+  
+  // 🔧 v26: 오디오 컨텍스트 초기화 함수 (강화)
   const initAudioContext = async () => {
     try {
+      // 기존 컨텍스트가 닫혔거나 없으면 새로 생성
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        console.log('🔊 AudioContext 생성됨');
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioContextRef.current = new AudioContextClass({ 
+          sampleRate: 24000,
+          latencyHint: 'interactive'
+        });
+        console.log('🔊 AudioContext 생성됨 (v26)');
       }
       
+      // suspended 상태면 resume
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
         console.log('🔊 AudioContext resumed');
       }
       
-      return true;
+      // 🆕 v26: 상태 확인 로그
+      console.log('🔊 AudioContext 상태:', audioContextRef.current.state);
+      
+      return audioContextRef.current.state === 'running';
     } catch (e) {
       console.error('AudioContext 초기화 실패:', e);
       return false;
@@ -356,12 +371,23 @@ function AgentPage() {
     }
   };
 
-  // 🔧 v25: 오디오 재생 (안정화)
+  // 🔧 v26: 오디오 재생 (안정화 강화)
   const playAudio = async (base64Audio) => {
     // 음소거 상태면 무시
-    if (muteServerAudioRef.current) return;
+    if (muteServerAudioRef.current) {
+      console.log('🔇 음소거 상태 - 오디오 무시');
+      return;
+    }
+    
+    // 🆕 v26: 빈 데이터 체크
+    if (!base64Audio || base64Audio.length < 100) {
+      console.log('⚠️ 오디오 데이터가 너무 짧음');
+      return;
+    }
     
     audioQueueRef.current.push(base64Audio);
+    console.log('🎵 오디오 큐 추가, 현재 큐 길이:', audioQueueRef.current.length);
+    
     if (!isPlayingRef.current) {
       processAudioQueue();
     }
@@ -377,15 +403,25 @@ function AgentPage() {
     const base64Audio = audioQueueRef.current.shift();
     
     try {
-      // 🔧 v25: AudioContext 확실히 초기화
+      // 🔧 v26: AudioContext 확실히 초기화 및 상태 확인
       const initialized = await initAudioContext();
       if (!initialized) {
-        console.error('AudioContext 초기화 실패');
+        console.error('❌ AudioContext 초기화 실패 - 재시도');
+        // 재시도
+        setTimeout(() => processAudioQueue(), 100);
+        return;
+      }
+      
+      // 🆕 v26: base64 디코딩 오류 처리
+      let audioData;
+      try {
+        audioData = atob(base64Audio);
+      } catch (decodeError) {
+        console.error('❌ base64 디코딩 실패:', decodeError);
         processAudioQueue();
         return;
       }
       
-      const audioData = atob(base64Audio);
       const arrayBuffer = new ArrayBuffer(audioData.length);
       const view = new Uint8Array(arrayBuffer);
       for (let i = 0; i < audioData.length; i++) {
@@ -398,18 +434,33 @@ function AgentPage() {
         float32[i] = pcm16[i] / 32768;
       }
       
+      // 🆕 v26: 빈 버퍼 체크
+      if (float32.length === 0) {
+        console.log('⚠️ 빈 오디오 버퍼 - 스킵');
+        processAudioQueue();
+        return;
+      }
+      
       const audioBuffer = audioContextRef.current.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
       
       const source = audioContextRef.current.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContextRef.current.destination);
-      source.onended = () => processAudioQueue();
+      
+      // 🆕 v26: 재생 완료/에러 핸들링 강화
+      source.onended = () => {
+        console.log('✅ 오디오 청크 재생 완료');
+        processAudioQueue();
+      };
+      
       source.start();
+      console.log('▶️ 오디오 재생 시작, 길이:', float32.length);
       
     } catch (e) {
-      console.error('오디오 재생 에러:', e);
-      processAudioQueue();
+      console.error('❌ 오디오 재생 에러:', e);
+      // 에러 발생해도 큐 계속 처리
+      setTimeout(() => processAudioQueue(), 50);
     }
   };
 
@@ -482,7 +533,7 @@ function AgentPage() {
     return rejectionWords.some(word => text.includes(word));
   };
 
-  // 🔧 v25: 음성 모드 시작 (안정화)
+  // 🔧 v26: 음성 모드 시작 (안정화 강화)
   const startVoiceMode = async () => {
     if (currentCall) return;
     if (isConnectedRef.current) return;
@@ -491,18 +542,29 @@ function AgentPage() {
     lastCallInfoRef.current = null;
     setPendingCall(null);
     muteServerAudioRef.current = false;
+    pendingAIResponseRef.current = null;
+    userTranscriptReceivedRef.current = false;
+    audioQueueRef.current = []; // 🆕 v26: 오디오 큐 초기화
     
     try {
       setStatus('연결중...');
       setIsVoiceMode(true);
       
-      // 🔧 v25: AudioContext 먼저 초기화 (사용자 제스처에서)
-      await initAudioContext();
+      // 🔧 v26: AudioContext 먼저 초기화 (사용자 제스처에서)
+      const audioReady = await initAudioContext();
+      console.log('🔊 AudioContext 준비:', audioReady ? '성공' : '실패');
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { sampleRate: 24000, channelCount: 1, echoCancellation: true, noiseSuppression: true } 
+        audio: { 
+          sampleRate: 24000, 
+          channelCount: 1, 
+          echoCancellation: true, 
+          noiseSuppression: true,
+          autoGainControl: true // 🆕 v26: 자동 게인 컨트롤 추가
+        } 
       });
       mediaStreamRef.current = stream;
+      console.log('🎤 마이크 스트림 획득');
       
       const ws = new WebSocket(`${WS_SERVER}?mode=app`);
       wsRef.current = ws;
@@ -516,10 +578,6 @@ function AgentPage() {
         ws.send(JSON.stringify(startMessage));
       };
       
-      // 🔧 v25.3: 대기 중인 AI 응답 저장용
-      let pendingAIResponse = null;
-      let userTranscriptReceived = false;
-      
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
@@ -527,38 +585,57 @@ function AgentPage() {
           if (msg.type === 'session_started') {
             isConnectedRef.current = true;
             setStatus('듣는중...');
-            console.log('✅ OpenAI 세션 시작됨');
+            console.log('✅ OpenAI 세션 시작됨 (v26)');
             startAudioCapture(stream, ws);
           }
           
+          // 🔧 v26: 오디오 수신 처리 강화
           if (msg.type === 'audio' && msg.data) {
             playAudio(msg.data);
           }
           
-          // 🔧 v25.3: AI 응답이 먼저 오면 대기
+          // 🔧 v26: AI 응답 처리 (순서 보장)
           if (msg.type === 'transcript' && msg.role === 'assistant') {
             if (lastCallInfoRef.current) return; // 전화 대기 중엔 AI 응답 무시
             
-            if (!userTranscriptReceived) {
-              // 사용자 음성이 아직 안 왔으면 대기
-              pendingAIResponse = msg.text;
-              console.log('⏳ AI 응답 대기:', msg.text?.substring(0, 20));
-            } else {
-              // 사용자 음성이 먼저 왔으면 바로 표시
+            const now = Date.now();
+            const timeSinceUser = now - lastUserMessageTimeRef.current;
+            
+            // 🆕 v26: 사용자 메시지 후 300ms 이내면 바로 표시, 아니면 대기
+            if (timeSinceUser < 300 || userTranscriptReceivedRef.current) {
               addMessage(msg.text, false);
-              userTranscriptReceived = false; // 리셋
+              userTranscriptReceivedRef.current = false;
+              pendingAIResponseRef.current = null;
+              console.log('💬 AI 응답 즉시 표시:', msg.text?.substring(0, 30));
+            } else {
+              // 사용자 음성이 아직 안 왔으면 대기
+              pendingAIResponseRef.current = msg.text;
+              console.log('⏳ AI 응답 대기 저장:', msg.text?.substring(0, 30));
+              
+              // 🆕 v26: 500ms 후에도 사용자 메시지 없으면 그냥 표시
+              setTimeout(() => {
+                if (pendingAIResponseRef.current === msg.text) {
+                  addMessage(msg.text, false);
+                  pendingAIResponseRef.current = null;
+                  console.log('⏰ AI 응답 타임아웃 표시');
+                }
+              }, 500);
             }
           }
           
           if (msg.type === 'transcript' && msg.role === 'user') {
-            userTranscriptReceived = true;
+            userTranscriptReceivedRef.current = true;
+            lastUserMessageTimeRef.current = Date.now();
             addMessage(msg.text, true);
+            console.log('👤 사용자 음성:', msg.text?.substring(0, 30));
             
-            // 🔧 v25.3: 대기 중이던 AI 응답 표시
-            if (pendingAIResponse) {
+            // 🔧 v26: 대기 중이던 AI 응답 즉시 표시
+            if (pendingAIResponseRef.current) {
+              const pendingText = pendingAIResponseRef.current;
+              pendingAIResponseRef.current = null;
               setTimeout(() => {
-                addMessage(pendingAIResponse, false);
-                pendingAIResponse = null;
+                addMessage(pendingText, false);
+                console.log('💬 대기 AI 응답 표시:', pendingText?.substring(0, 30));
               }, 100);
             }
             
