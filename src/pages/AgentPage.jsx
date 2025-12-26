@@ -1,13 +1,3 @@
-// ============================================
-// AgentPage.jsx v26.0 - 음성 안정화 + 보험 전문가
-// 수정 내용:
-// - 🔧 음성 재생 안정화 (AudioContext 강화)
-// - 🔧 음성 순서 문제 완전 해결
-// - 🔧 오디오 큐 버퍼링 개선
-// - 🆕 보험 전문가 프롬프트 연동
-// - 🆕 일정 안내 기능 지원
-// ============================================
-
 import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
 
@@ -26,7 +16,7 @@ function AgentPage() {
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [analysisContextList, setAnalysisContextList] = useState([]);
   
-  // 소통 UI 상태 (카톡/문자/이메일/팩스)
+  // 🆕 v24: 소통 UI 상태만 추가 (카톡/문자/이메일/팩스)
   const [pendingComm, setPendingComm] = useState(null);
   const [showCommOverlay, setShowCommOverlay] = useState(false);
   const [commType, setCommType] = useState(null);
@@ -47,41 +37,8 @@ function AgentPage() {
   const cameraInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const fileInputRef = useRef(null);
+
   const messagesEndRef = useRef(null);
-  
-  // 🆕 v26: 음성 순서 관리용 ref
-  const pendingAIResponseRef = useRef(null);
-  const userTranscriptReceivedRef = useRef(false);
-  const lastUserMessageTimeRef = useRef(0);
-  
-  // 🔧 v26: 오디오 컨텍스트 초기화 함수 (강화)
-  const initAudioContext = async () => {
-    try {
-      // 기존 컨텍스트가 닫혔거나 없으면 새로 생성
-      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        audioContextRef.current = new AudioContextClass({ 
-          sampleRate: 24000,
-          latencyHint: 'interactive'
-        });
-        console.log('🔊 AudioContext 생성됨 (v26)');
-      }
-      
-      // suspended 상태면 resume
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-        console.log('🔊 AudioContext resumed');
-      }
-      
-      // 🆕 v26: 상태 확인 로그
-      console.log('🔊 AudioContext 상태:', audioContextRef.current.state);
-      
-      return audioContextRef.current.state === 'running';
-    } catch (e) {
-      console.error('AudioContext 초기화 실패:', e);
-      return false;
-    }
-  };
   
   useEffect(() => {
     const scrollToBottom = () => {
@@ -134,7 +91,7 @@ function AgentPage() {
     return () => clearInterval(intervalId);
   }, [currentCall, callDuration]);
 
-  // 소통 명령 감지 (카톡/문자/이메일/팩스)
+  // 🆕 v24: 소통 명령 감지 (카톡/문자/이메일/팩스)
   const checkCommCommand = (text) => {
     let type = null;
     if (text.includes('카톡') || text.includes('카카오')) type = 'kakao';
@@ -162,6 +119,7 @@ function AgentPage() {
     return { type, name, phone };
   };
 
+  // 🆕 v24: 소통 타입별 정보
   const getCommTypeInfo = (type) => {
     const info = {
       kakao: { icon: '💬', label: '카카오톡', color: '#FEE500', textColor: '#191919' },
@@ -172,6 +130,7 @@ function AgentPage() {
     return info[type] || info.kakao;
   };
 
+  // 🆕 v24: 소통 오버레이 열기
   const openCommOverlay = (type, target) => {
     setCommType(type);
     setCommTarget(target);
@@ -179,6 +138,7 @@ function AgentPage() {
     setShowCommOverlay(true);
   };
 
+  // 🆕 v24: 소통 오버레이 닫기
   const closeCommOverlay = () => {
     setShowCommOverlay(false);
     setCommType(null);
@@ -186,6 +146,7 @@ function AgentPage() {
     setCommStatus('ready');
   };
 
+  // 🆕 v24: 소통 발송 실행
   const executeComm = async () => {
     if (!commType || !commTarget) return;
     
@@ -201,6 +162,7 @@ function AgentPage() {
     addMessage(`✅ ${commTarget.name}님께 ${typeLabels[commType]}을 발송했습니다.`, false);
   };
 
+  // 🆕 v24: 소통 복명복창 승인
   const handleCommApprove = () => {
     if (!pendingComm) return;
     const commInfo = pendingComm;
@@ -209,6 +171,7 @@ function AgentPage() {
     setTimeout(() => executeComm(), 500);
   };
 
+  // 🆕 v24: 소통 복명복창 취소
   const handleCommCancel = () => {
     setPendingComm(null);
     addMessage('네, 발송을 취소했습니다.', false);
@@ -229,17 +192,28 @@ function AgentPage() {
     addMessage('🗑️ 분석 기록이 초기화되었습니다. 새로운 파일을 업로드해주세요.', false);
   };
 
-  // 🔧 v25: 파일 분석 - 이미지와 문서 분리
   const handleFileSelect = async (event) => {
     const files = Array.from(event.target.files);
     if (!files || files.length === 0) return;
     
-    // 🔧 v25: 음성 모드 중이면 AudioContext 먼저 초기화
-    await initAudioContext();
+    const supportedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/haansofthwp', 'application/x-hwp',
+      'text/plain'
+    ];
     
     for (const file of files) {
       const isImage = file.type.startsWith('image/');
-      const isPDF = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+      const isPDF = file.type === 'application/pdf';
+      const isSupported = supportedTypes.some(type => file.type.includes(type.split('/')[1])) || isImage || isPDF;
+      
+      if (!isSupported && !file.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|pdf|doc|docx|xls|xlsx|hwp|txt)$/i)) {
+        addMessage(`⚠️ 지원하지 않는 파일: ${file.name}`, false);
+        continue;
+      }
       
       if (file.size > 20 * 1024 * 1024) {
         addMessage(`⚠️ 파일 크기 초과 (20MB 제한): ${file.name}`, false);
@@ -249,43 +223,31 @@ function AgentPage() {
       try {
         const base64 = await fileToBase64(file);
         const fileName = file.name;
-        const fileCount = analysisContextList.length + 1;
+        const fileType = isImage ? 'image' : (isPDF ? 'pdf' : 'document');
         
-        // 업로드 메시지
+        const fileCount = analysisContextList.length + 1;
         if (isImage) {
-          addMessage(`📎 [${fileCount}번째] 이미지 업로드: ${fileName}`, true, base64);
+          addMessage(`📎 [${fileCount}번째 파일] 이미지 업로드: ${fileName}\n분석 중...`, true, base64);
         } else {
-          addMessage(`📎 [${fileCount}번째] 파일 업로드: ${fileName}`, true, null);
+          addMessage(`📎 [${fileCount}번째 파일] 파일 업로드: ${fileName}\n분석 중...`, true, null);
         }
         
         setIsAnalyzing(true);
-        setStatus(`🔍 분석중...`);
+        setStatus(`분석중... (${fileCount}번째)`);
         
-        // 🔧 v25: 이미지 vs 문서 분기
-        let analysis;
-        if (isImage) {
-          // 이미지는 /api/analyze-image로 (GPT-4o Vision)
-          analysis = await analyzeImage(base64, fileName);
-        } else {
-          // PDF/문서는 /api/analyze-file로
-          analysis = await analyzeFile(base64, fileName, isPDF ? 'pdf' : 'document');
-        }
+        const analysis = await analyzeFile(base64, fileName, fileType);
+        addMessage(analysis, false);
         
-        // ✨ v25: AI지니 자동 안내 메시지
-        addMessage(`📋 분석 완료!\n\n${analysis}\n\n💬 이 파일에 대해 질문해주세요.`, false);
-        
-        // 컨텍스트 저장 (대화에서 활용)
         const contextData = {
           id: Date.now(),
           fileName: fileName,
-          fileType: isImage ? 'image' : (isPDF ? 'pdf' : 'document'),
+          fileType: fileType,
           analysis: analysis,
           timestamp: new Date().toISOString()
         };
         
         setAnalysisContextList(prev => {
           const newList = [...prev, contextData];
-          // WebSocket에 컨텍스트 전달
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({
               type: 'update_context',
@@ -303,6 +265,14 @@ function AgentPage() {
     
     setIsAnalyzing(false);
     setStatus('대기중');
+    
+    const totalFiles = analysisContextList.length + files.length;
+    if (totalFiles > 1) {
+      addMessage(`✅ 총 ${totalFiles}개 파일 분석 완료!\n💬 "비교해줘", "어떤 게 더 좋아?" 등 질문해보세요.`, false);
+    } else {
+      addMessage('💬 추가 파일을 업로드하거나 질문해주세요!', false);
+    }
+    
     event.target.value = '';
   };
 
@@ -315,37 +285,6 @@ function AgentPage() {
     });
   };
 
-  // 🔧 v25: 이미지 분석 API (별도 함수)
-  const analyzeImage = async (base64Data, fileName) => {
-    try {
-      const response = await fetch(`${RENDER_SERVER}/api/analyze-image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          image: base64Data,
-          prompt: `이 이미지를 분석해주세요. 
-만약 보험증권, 영수증, 명함, 의료비 청구서 등이라면:
-1. 문서 유형
-2. 핵심 정보 (이름, 금액, 날짜 등)
-3. 보험 관점에서의 의미
-를 정리해주세요.`
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        return data.analysis;
-      } else {
-        return `❌ 분석 실패: ${data.error}`;
-      }
-    } catch (error) {
-      console.error('이미지 분석 API 에러:', error);
-      return '❌ 서버 연결 오류. 잠시 후 다시 시도해주세요.';
-    }
-  };
-
-  // 🔧 v25: 파일/PDF 분석 API
   const analyzeFile = async (base64Data, fileName, fileType) => {
     try {
       const response = await fetch(`${RENDER_SERVER}/api/analyze-file`, {
@@ -371,23 +310,8 @@ function AgentPage() {
     }
   };
 
-  // 🔧 v26: 오디오 재생 (안정화 강화)
   const playAudio = async (base64Audio) => {
-    // 음소거 상태면 무시
-    if (muteServerAudioRef.current) {
-      console.log('🔇 음소거 상태 - 오디오 무시');
-      return;
-    }
-    
-    // 🆕 v26: 빈 데이터 체크
-    if (!base64Audio || base64Audio.length < 100) {
-      console.log('⚠️ 오디오 데이터가 너무 짧음');
-      return;
-    }
-    
     audioQueueRef.current.push(base64Audio);
-    console.log('🎵 오디오 큐 추가, 현재 큐 길이:', audioQueueRef.current.length);
-    
     if (!isPlayingRef.current) {
       processAudioQueue();
     }
@@ -403,25 +327,15 @@ function AgentPage() {
     const base64Audio = audioQueueRef.current.shift();
     
     try {
-      // 🔧 v26: AudioContext 확실히 초기화 및 상태 확인
-      const initialized = await initAudioContext();
-      if (!initialized) {
-        console.error('❌ AudioContext 초기화 실패 - 재시도');
-        // 재시도
-        setTimeout(() => processAudioQueue(), 100);
-        return;
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
       }
       
-      // 🆕 v26: base64 디코딩 오류 처리
-      let audioData;
-      try {
-        audioData = atob(base64Audio);
-      } catch (decodeError) {
-        console.error('❌ base64 디코딩 실패:', decodeError);
-        processAudioQueue();
-        return;
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
       }
       
+      const audioData = atob(base64Audio);
       const arrayBuffer = new ArrayBuffer(audioData.length);
       const view = new Uint8Array(arrayBuffer);
       for (let i = 0; i < audioData.length; i++) {
@@ -434,33 +348,17 @@ function AgentPage() {
         float32[i] = pcm16[i] / 32768;
       }
       
-      // 🆕 v26: 빈 버퍼 체크
-      if (float32.length === 0) {
-        console.log('⚠️ 빈 오디오 버퍼 - 스킵');
-        processAudioQueue();
-        return;
-      }
-      
       const audioBuffer = audioContextRef.current.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
       
       const source = audioContextRef.current.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContextRef.current.destination);
-      
-      // 🆕 v26: 재생 완료/에러 핸들링 강화
-      source.onended = () => {
-        console.log('✅ 오디오 청크 재생 완료');
-        processAudioQueue();
-      };
-      
+      source.onended = () => processAudioQueue();
       source.start();
-      console.log('▶️ 오디오 재생 시작, 길이:', float32.length);
-      
     } catch (e) {
-      console.error('❌ 오디오 재생 에러:', e);
-      // 에러 발생해도 큐 계속 처리
-      setTimeout(() => processAudioQueue(), 50);
+      console.error('오디오 재생 에러:', e);
+      processAudioQueue();
     }
   };
 
@@ -502,7 +400,7 @@ function AgentPage() {
     let name = '고객';
     const nameMatch = text.match(/([가-힣]{2,4})/g);
     if (nameMatch) {
-      const excludeWords = ['전화', '통화', '연결', '해줘', '해주세요', '부탁', '입니다', '에게', '한테', '번호', '연락', '고객', '상담', '예약', '보험', '계약'];
+      const excludeWords = ['전화', '통화', '연결', '해줘', '해주세요', '부탁', '입니다', '에게', '한테', '번호', '연락', '고객', '상담', '예약', '보험', '계약', '생일', '축하', '안부', '소개', '만기', '연체', '미납', '갱신'];
       for (const n of nameMatch) {
         if (!excludeWords.includes(n)) {
           name = n;
@@ -511,13 +409,21 @@ function AgentPage() {
       }
     }
     
-    let purpose = '상담 일정 예약';
-    if (text.includes('보험') && text.includes('상담')) purpose = '보험 상담';
-    else if (text.includes('계약')) purpose = '계약 관련 상담';
-    else if (text.includes('청구')) purpose = '보험금 청구 안내';
-    else if (text.includes('갱신')) purpose = '보험 갱신 안내';
-    else if (text.includes('만기')) purpose = '만기 안내';
-    else if (text.includes('상담')) purpose = '상담 일정 예약';
+    // 🆕 v21.8: 시나리오 키워드 감지 (6가지)
+    let purpose = '상담예약';  // 기본값
+    
+    if (text.includes('생일') || text.includes('축하')) {
+      purpose = '생일축하';
+    } else if (text.includes('연체') || text.includes('미납') || text.includes('유예')) {
+      purpose = '연체안내';
+    } else if (text.includes('만기') || text.includes('갱신')) {
+      purpose = '만기안내';
+    } else if (text.includes('소개') || text.includes('인사')) {
+      purpose = '지니소개';
+    } else if (text.includes('안부')) {
+      purpose = '안부전화';
+    }
+    // 그 외는 기본 '상담예약'
     
     return { name, phone, purpose };
   };
@@ -533,44 +439,27 @@ function AgentPage() {
     return rejectionWords.some(word => text.includes(word));
   };
 
-  // 🔧 v26: 음성 모드 시작 (안정화 강화)
   const startVoiceMode = async () => {
     if (currentCall) return;
     if (isConnectedRef.current) return;
     
-    // 상태 초기화
     lastCallInfoRef.current = null;
     setPendingCall(null);
     muteServerAudioRef.current = false;
-    pendingAIResponseRef.current = null;
-    userTranscriptReceivedRef.current = false;
-    audioQueueRef.current = []; // 🆕 v26: 오디오 큐 초기화
     
     try {
       setStatus('연결중...');
       setIsVoiceMode(true);
       
-      // 🔧 v26: AudioContext 먼저 초기화 (사용자 제스처에서)
-      const audioReady = await initAudioContext();
-      console.log('🔊 AudioContext 준비:', audioReady ? '성공' : '실패');
-      
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          sampleRate: 24000, 
-          channelCount: 1, 
-          echoCancellation: true, 
-          noiseSuppression: true,
-          autoGainControl: true // 🆕 v26: 자동 게인 컨트롤 추가
-        } 
+        audio: { sampleRate: 24000, channelCount: 1, echoCancellation: true, noiseSuppression: true } 
       });
       mediaStreamRef.current = stream;
-      console.log('🎤 마이크 스트림 획득');
       
       const ws = new WebSocket(`${WS_SERVER}?mode=app`);
       wsRef.current = ws;
       
       ws.onopen = () => {
-        console.log('🔌 WebSocket 연결됨');
         const startMessage = { 
           type: 'start_app',
           analysisContextList: analysisContextList
@@ -585,61 +474,17 @@ function AgentPage() {
           if (msg.type === 'session_started') {
             isConnectedRef.current = true;
             setStatus('듣는중...');
-            console.log('✅ OpenAI 세션 시작됨 (v26)');
             startAudioCapture(stream, ws);
           }
           
-          // 🔧 v26: 오디오 수신 처리 강화
           if (msg.type === 'audio' && msg.data) {
+            if (muteServerAudioRef.current) return;
             playAudio(msg.data);
           }
           
-          // 🔧 v26: AI 응답 처리 (순서 보장)
-          if (msg.type === 'transcript' && msg.role === 'assistant') {
-            if (lastCallInfoRef.current) return; // 전화 대기 중엔 AI 응답 무시
-            
-            const now = Date.now();
-            const timeSinceUser = now - lastUserMessageTimeRef.current;
-            
-            // 🆕 v26: 사용자 메시지 후 300ms 이내면 바로 표시, 아니면 대기
-            if (timeSinceUser < 300 || userTranscriptReceivedRef.current) {
-              addMessage(msg.text, false);
-              userTranscriptReceivedRef.current = false;
-              pendingAIResponseRef.current = null;
-              console.log('💬 AI 응답 즉시 표시:', msg.text?.substring(0, 30));
-            } else {
-              // 사용자 음성이 아직 안 왔으면 대기
-              pendingAIResponseRef.current = msg.text;
-              console.log('⏳ AI 응답 대기 저장:', msg.text?.substring(0, 30));
-              
-              // 🆕 v26: 500ms 후에도 사용자 메시지 없으면 그냥 표시
-              setTimeout(() => {
-                if (pendingAIResponseRef.current === msg.text) {
-                  addMessage(msg.text, false);
-                  pendingAIResponseRef.current = null;
-                  console.log('⏰ AI 응답 타임아웃 표시');
-                }
-              }, 500);
-            }
-          }
-          
           if (msg.type === 'transcript' && msg.role === 'user') {
-            userTranscriptReceivedRef.current = true;
-            lastUserMessageTimeRef.current = Date.now();
             addMessage(msg.text, true);
-            console.log('👤 사용자 음성:', msg.text?.substring(0, 30));
             
-            // 🔧 v26: 대기 중이던 AI 응답 즉시 표시
-            if (pendingAIResponseRef.current) {
-              const pendingText = pendingAIResponseRef.current;
-              pendingAIResponseRef.current = null;
-              setTimeout(() => {
-                addMessage(pendingText, false);
-                console.log('💬 대기 AI 응답 표시:', pendingText?.substring(0, 30));
-              }, 100);
-            }
-            
-            // 전화 승인 대기 중일 때
             if (lastCallInfoRef.current) {
               if (checkApproval(msg.text)) {
                 const callInfo = lastCallInfoRef.current;
@@ -658,17 +503,27 @@ function AgentPage() {
               }
             }
             
-            // 전화 명령 감지
             const callInfo = checkCallCommand(msg.text);
             if (callInfo) {
               muteServerAudioRef.current = true;
               setPendingCall(callInfo);
               lastCallInfoRef.current = callInfo;
-              addMessage(`${callInfo.name}님께 ${callInfo.purpose} 목적으로 전화할까요? (네/아니오)`, false);
+              
+              // 🆕 v21.8: 시나리오별 복명복창 메시지
+              const purposeLabels = {
+                '상담예약': '상담예약',
+                '생일축하': '생일축하',
+                '연체안내': '연체안내',
+                '만기안내': '만기안내',
+                '지니소개': '지니소개',
+                '안부전화': '안부'
+              };
+              const label = purposeLabels[callInfo.purpose] || callInfo.purpose;
+              addMessage(`📞 ${callInfo.name}님께 [${label}] 전화할까요? (네/아니오)`, false);
               return;
             }
             
-            // 소통 명령 감지
+            // 🆕 v24: 소통 명령 감지
             const commInfo = checkCommCommand(msg.text);
             if (commInfo) {
               setPendingComm(commInfo);
@@ -678,14 +533,14 @@ function AgentPage() {
             }
           }
           
+          if (msg.type === 'transcript' && msg.role === 'assistant') {
+            if (lastCallInfoRef.current) return;
+            addMessage(msg.text, false);
+          }
+          
           if (msg.type === 'interrupt') {
             audioQueueRef.current = [];
             isPlayingRef.current = false;
-          }
-          
-          if (msg.type === 'error') {
-            console.error('서버 에러:', msg.error);
-            addMessage(`⚠️ 연결 오류: ${msg.error}`, false);
           }
           
         } catch (e) {
@@ -701,7 +556,6 @@ function AgentPage() {
       };
       
       ws.onclose = () => {
-        console.log('🔌 WebSocket 연결 종료');
         isConnectedRef.current = false;
         setStatus('대기중');
         setIsVoiceMode(false);
@@ -847,7 +701,7 @@ function AgentPage() {
       }
     }
     
-    // 소통 승인 대기
+    // 🆕 v24: 소통 승인 대기
     if (pendingComm) {
       if (checkApproval(text)) {
         handleCommApprove();
@@ -866,7 +720,7 @@ function AgentPage() {
       return;
     }
     
-    // 소통 명령 감지
+    // 🆕 v24: 소통 명령 감지
     const commInfo = checkCommCommand(text);
     if (commInfo) {
       setPendingComm(commInfo);
@@ -878,31 +732,15 @@ function AgentPage() {
     setStatus('생각중...');
     
     try {
-      // 🔧 v25.2: 분석 컨텍스트 포함하여 전송
-      const chatResponse = await fetch(`${RENDER_SERVER}/api/chat`, {
+      const response = await fetch(`${RENDER_SERVER}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: text,
-          analysisContext: analysisContextList.length > 0 ? analysisContextList : null
-        })
+        body: JSON.stringify({ message: text })
       });
-      const chatData = await chatResponse.json();
-      
-      // 🔧 v25.2: 디버깅 로그 추가
-      console.log('📨 서버 응답:', chatData);
-      
-      // 🔧 v25.2: success 체크 추가
-      if (chatData.success && chatData.response) {
-        addMessage(chatData.response, false);
-      } else if (chatData.error) {
-        addMessage(`⚠️ ${chatData.error}`, false);
-      } else {
-        addMessage('죄송합니다, 응답을 받지 못했습니다.', false);
-      }
+      const data = await response.json();
+      addMessage(data.reply, false);
     } catch (error) {
-      console.error('채팅 에러:', error);
-      addMessage('⚠️ 서버 연결 오류. 잠시 후 다시 시도해주세요.', false);
+      addMessage('네, 대표님!', false);
     }
     
     setStatus('대기중');
@@ -944,10 +782,11 @@ function AgentPage() {
         </div>
       )}
 
+      {/* 🆕 v21.8: 전화 승인 배너 - 시나리오 표시 */}
       {pendingCall && (
         <div className="pending-call-banner">
           <div className="pending-info">
-            <span>📞 {pendingCall.name}님께 전화할까요?</span>
+            <span>📞 {pendingCall.name}님께 [{pendingCall.purpose}] 전화할까요?</span>
           </div>
           <div className="pending-buttons">
             <button className="approve-btn" onClick={() => {
@@ -955,7 +794,7 @@ function AgentPage() {
               setPendingCall(null);
               lastCallInfoRef.current = null;
               muteServerAudioRef.current = false;
-              addMessage(`네, ${callInfo.name}님께 전화하겠습니다.`, false);
+              addMessage(`네, ${callInfo.name}님께 [${callInfo.purpose}] 전화하겠습니다.`, false);
               makeCall(callInfo.name, callInfo.phone, callInfo.purpose);
             }}>네</button>
             <button className="reject-btn" onClick={() => {
@@ -968,6 +807,7 @@ function AgentPage() {
         </div>
       )}
 
+      {/* 🆕 v24: 소통 승인 배너 */}
       {pendingComm && (
         <div className="pending-call-banner" style={{ background: 'linear-gradient(135deg, #3B82F6, #2563eb)' }}>
           <div className="pending-info">
@@ -1068,6 +908,7 @@ function AgentPage() {
         </div>
       </div>
 
+      {/* 🆕 v24: 소통 오버레이 */}
       {showCommOverlay && commTarget && (
         <div className="comm-overlay">
           <div className="comm-header" style={{ background: getCommTypeInfo(commType).color }}>
