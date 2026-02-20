@@ -223,7 +223,7 @@ function AgentPage() {
       try {
         const base64 = await fileToBase64(file);
         const fileName = file.name;
-        const fileType = isImage ? 'image' : (isPDF ? 'pdf' : 'document');
+        const fileType = file.type || (isImage ? 'image/jpeg' : (isPDF ? 'application/pdf' : 'document'));
         
         const fileCount = analysisContextList.length + 1;
         if (isImage) {
