@@ -304,33 +304,31 @@ function AgentPage() {
     });
   };
 
-  // 🆕 v22.3: 이미지 압축 (5MB 초과 시 자동 리사이즈)
+  // 🆕 v22.4: 이미지를 항상 JPEG로 변환 + 5MB 초과 시 리사이즈
   const compressImage = (base64Data, maxSizeMB = 4) => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
         const maxSize = maxSizeMB * 1024 * 1024;
-        
-        // base64 크기 체크
         const currentSize = base64Data.length * 0.75;
-        if (currentSize <= maxSize) {
-          resolve(base64Data);
-          return;
+        
+        // 큰 이미지는 리사이즈
+        if (currentSize > maxSize) {
+          const ratio = Math.sqrt(maxSize / currentSize) * 0.85;
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
         }
         
-        // 비율 유지하면서 리사이즈
-        const ratio = Math.sqrt(maxSize / currentSize) * 0.85;
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-        
+        // 항상 canvas를 통해 JPEG로 변환 (PNG → JPEG 변환 보장)
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(img, 0, 0, width, height);
         
-        // JPEG 품질 조절
         let quality = 0.85;
         let result = canvas.toDataURL('image/jpeg', quality);
         
@@ -340,7 +338,7 @@ function AgentPage() {
           result = canvas.toDataURL('image/jpeg', quality);
         }
         
-        console.log(`🗜️ 이미지 압축: ${(currentSize/1024/1024).toFixed(1)}MB → ${(result.length*0.75/1024/1024).toFixed(1)}MB`);
+        console.log(`🗜️ 이미지 변환: ${(currentSize/1024/1024).toFixed(1)}MB → ${(result.length*0.75/1024/1024).toFixed(1)}MB (JPEG)`);
         resolve(result);
       };
       img.src = base64Data;
