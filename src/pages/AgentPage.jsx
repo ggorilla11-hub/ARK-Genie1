@@ -238,6 +238,19 @@ function AgentPage() {
         const analysis = await analyzeFile(base64, fileName, fileType);
         addMessage(analysis, false);
         
+        // 🆕 v22: 이미지 분석 성공 시 PDF 리포트 버튼 추가
+        if (isImage && analysis && !analysis.startsWith('❌')) {
+          setMessages(prev => [...prev, {
+            id: Date.now() + Math.random(),
+            text: '📄 PDF 리포트 보기',
+            isUser: false,
+            isPdfButton: true,
+            analysisText: analysis,
+            analysisFileName: fileName,
+            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+          }]);
+        }
+        
         const contextData = {
           id: Date.now(),
           fileName: fileName,
@@ -307,6 +320,92 @@ function AgentPage() {
     } catch (error) {
       console.error('파일 분석 API 에러:', error);
       return '❌ 서버 연결 오류. 잠시 후 다시 시도해주세요.';
+    }
+  };
+
+  // 🆕 v22: PDF 리포트 새 탭에서 열기
+  const openPdfReport = (analysisText, fileName) => {
+    const INSURANCE_DB_HTML = `
+      <tr style="background:#fff5f5;"><td><strong>1</strong></td><td>푸본현대</td><td>MAX세븐하이픽</td><td><strong>109,500원</strong></td><td>107.5%</td><td>500%</td></tr>
+      <tr style="background:#f5f8ff;"><td><strong>2</strong></td><td>iM라이프</td><td>iM Plus세븐UP</td><td>112,300원</td><td><strong>107.7%</strong></td><td>500%</td></tr>
+      <tr style="background:#f5fff5;"><td><strong>3</strong></td><td>하나생명</td><td>하나로100UP</td><td>135,600원</td><td>107.5%</td><td>611%</td></tr>
+      <tr><td>4</td><td>신한라이프</td><td>세븐Plus II</td><td>143,020원</td><td>107.5%</td><td>700%</td></tr>
+      <tr><td>5</td><td>교보생명</td><td>K-밸류업</td><td>151,900원</td><td>107.5%</td><td>640%</td></tr>
+      <tr><td>6</td><td>DB생명</td><td>700</td><td>152,200원</td><td>107%</td><td>700%</td></tr>
+      <tr><td>7</td><td>농협생명</td><td>스텝업700</td><td>166,600원</td><td>107.7%</td><td>700%</td></tr>
+      <tr><td>8</td><td>ABL생명</td><td>우리WON세븐</td><td>206,250원</td><td>107%</td><td>700%</td></tr>`;
+
+    const analysisHtml = analysisText
+      .replace(/\n/g, '<br>')
+      .replace(/#{1,3}\s*(.*?)(<br>)/g, '<h3 style="color:#192a56;margin:15px 0 8px 0;">$1</h3>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\|(.*?)\|/g, function(match) {
+        return match;
+      });
+
+    const today = new Date().toLocaleDateString('ko-KR');
+    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARK-Genie 보험분석 리포트</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;font-size:10pt;color:#222;line-height:1.7;background:#f8f9fa}
+.container{max-width:800px;margin:0 auto;background:white;box-shadow:0 2px 20px rgba(0,0,0,0.1)}
+.header{background:linear-gradient(135deg,#192a56,#273c75);color:white;padding:25px 30px;text-align:center}
+.header h1{font-size:22pt;font-weight:700;letter-spacing:2px;margin-bottom:4px}
+.header p{font-size:9pt;font-weight:300;opacity:0.85}
+.content{padding:25px 30px}
+.section-title{font-size:14pt;font-weight:700;color:#192a56;border-bottom:2px solid #192a56;padding-bottom:5px;margin:25px 0 12px 0}
+.analysis-text{font-size:10pt;line-height:1.8;white-space:pre-wrap;word-break:break-word}
+.analysis-text h3{font-size:12pt;color:#192a56;border-left:4px solid #192a56;padding-left:10px;margin:18px 0 8px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0 15px 0;font-size:9pt}
+table th{background:#192a56;color:white;padding:7px 8px;text-align:center;font-weight:500}
+table td{padding:5px 8px;border:1px solid #ddd;text-align:center}
+table tr:nth-child(even) td{background:#f0f4f8}
+.highlight-box{padding:12px 15px;border-radius:6px;margin:10px 0;font-size:9.5pt;line-height:1.7}
+.highlight-blue{background:#e6f0ff;border-left:4px solid #192a56}
+.highlight-green{background:#ebffeb;border-left:4px solid #1e8c1e;color:#1a6b1a}
+.btn-area{text-align:center;padding:20px;background:#f0f4f8;border-top:1px solid #eee}
+.btn-print{background:#192a56;color:white;border:none;padding:12px 30px;border-radius:8px;font-size:12pt;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif}
+.btn-print:hover{background:#273c75}
+.footer{font-size:7pt;color:#999;padding:15px 30px;border-top:1px solid #eee;line-height:1.5}
+@media print{.btn-area{display:none} .container{box-shadow:none} body{background:white}}
+</style></head><body>
+<div class="container">
+<div class="header">
+<h1>ARK-Genie 보험분석 리포트</h1>
+<p>AI 기반 보험 Gap 분석 및 최적 상품 추천 | ${today}</p>
+</div>
+<div class="content">
+<div class="section-title">📋 AI 분석 결과</div>
+<div class="highlight-blue highlight-box"><strong>분석 파일:</strong> ${fileName} | <strong>엔진:</strong> Claude Vision AI (ARK-Genie v22.0)</div>
+<div class="analysis-text">${analysisHtml}</div>
+<div class="section-title">📊 종신보험 체증형 전체 비교 (8개사)</div>
+<div class="highlight-blue highlight-box"><strong>40세 남성 / 사망보험금 1억원 / 20년납 기준 (보험료 최저가 순)</strong></div>
+<table>
+<tr><th>순위</th><th>보험사</th><th>상품명</th><th>월보험료</th><th>환급률10년</th><th>체증한도</th></tr>
+${INSURANCE_DB_HTML}
+</table>
+<div class="section-title">💬 상담 TIP</div>
+<div class="highlight-green highlight-box">
+"고객님, AI로 보험을 분석해보니 보장이 부족한 부분이 있습니다.<br>
+종신보험 체증형으로 사망보장 + 저축 기능을 동시에 갖출 수 있습니다.<br>
+푸본현대 MAX세븐하이픽은 월 10만9천원, 7년 후 납입원금 100% 환급됩니다."
+</div>
+</div>
+<div class="btn-area">
+<button class="btn-print" onclick="window.print()">🖨️ PDF 저장 / 인쇄</button>
+</div>
+<div class="footer">
+※ 본 리포트는 AI 분석 참고자료이며, 실제 가입 시 보험사 심사 결과에 따라 달라질 수 있습니다.<br>
+※ 오원트금융연구소 | ARK-Genie v22.0 | ${today} 생성
+</div>
+</div></body></html>`;
+
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(html);
+      newWindow.document.close();
     }
   };
 
@@ -841,7 +940,31 @@ function AgentPage() {
                       onClick={() => window.open(msg.imageData, '_blank')}
                     />
                   )}
-                  <p>{msg.text}</p>
+                  {msg.isPdfButton ? (
+                    <button 
+                      onClick={() => openPdfReport(msg.analysisText, msg.analysisFileName)}
+                      style={{
+                        background: 'linear-gradient(135deg, #192a56, #273c75)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '12px 24px',
+                        borderRadius: '10px',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 2px 8px rgba(25,42,86,0.3)'
+                      }}
+                    >
+                      📄 PDF 리포트 보기
+                    </button>
+                  ) : (
+                    <p>{msg.text}</p>
+                  )}
                   <span className="message-time">{msg.time}</span>
                 </div>
               </div>
