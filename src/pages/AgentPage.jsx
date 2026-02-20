@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './AgentPage.css';
 
-const RENDER_SERVER = 'https://ark-genie-server.onrender.com';
-const WS_SERVER = 'wss://ark-genie-server.onrender.com';
+const RENDER_SERVER = 'https://ark-genie-server-staging.onrender.com';
+const WS_SERVER = 'wss://ark-genie-server-staging.onrender.com';
 
 function AgentPage() {
   const [messages, setMessages] = useState([]);
