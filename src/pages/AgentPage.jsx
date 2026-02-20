@@ -221,9 +221,15 @@ function AgentPage() {
       }
       
       try {
-        const base64 = await fileToBase64(file);
+        let base64 = await fileToBase64(file);
         const fileName = file.name;
-        const fileType = file.type || (isImage ? 'image/jpeg' : (isPDF ? 'application/pdf' : 'document'));
+        let fileType = file.type || (isImage ? 'image/jpeg' : (isPDF ? 'application/pdf' : 'document'));
+        
+        // 🆕 v22.3: 이미지 자동 압축 (5MB 초과 시)
+        if (isImage) {
+          base64 = await compressImage(base64, 4);
+          fileType = 'image/jpeg'; // 압축 후 항상 JPEG
+        }
         
         const fileCount = analysisContextList.length + 1;
         if (isImage) {
@@ -295,6 +301,49 @@ function AgentPage() {
       reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result);
       reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // 🆕 v22.3: 이미지 압축 (5MB 초과 시 자동 리사이즈)
+  const compressImage = (base64Data, maxSizeMB = 4) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        const maxSize = maxSizeMB * 1024 * 1024;
+        
+        // base64 크기 체크
+        const currentSize = base64Data.length * 0.75;
+        if (currentSize <= maxSize) {
+          resolve(base64Data);
+          return;
+        }
+        
+        // 비율 유지하면서 리사이즈
+        const ratio = Math.sqrt(maxSize / currentSize) * 0.85;
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // JPEG 품질 조절
+        let quality = 0.85;
+        let result = canvas.toDataURL('image/jpeg', quality);
+        
+        // 여전히 크면 품질 더 낮추기
+        while (result.length * 0.75 > maxSize && quality > 0.3) {
+          quality -= 0.1;
+          result = canvas.toDataURL('image/jpeg', quality);
+        }
+        
+        console.log(`🗜️ 이미지 압축: ${(currentSize/1024/1024).toFixed(1)}MB → ${(result.length*0.75/1024/1024).toFixed(1)}MB`);
+        resolve(result);
+      };
+      img.src = base64Data;
     });
   };
 
